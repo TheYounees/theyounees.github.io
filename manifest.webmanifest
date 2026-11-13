@@ -1,0 +1,21 @@
+{
+  "name": "JARVIS — Şəxsi köməkçi",
+  "short_name": "JARVIS",
+  "description": "Azərbaycan dilində danışan, yaddaşı olan və cihazı idarə edən şəxsi süni intellekt köməkçisi.",
+  "lang": "az",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#05080c",
+  "theme_color": "#05080c",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

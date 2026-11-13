@@ -1,11 +1,206 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="az">
 <head>
-<meta charset="UTF-8">
-<title>JARVIS CORE</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#05080c" />
+<meta name="description" content="JARVIS — Azərbaycan dilində danışan şəxsi süni intellekt köməkçisi." />
+<title>JARVIS — Şəxsi köməkçi</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="assets/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
-<h1>JARVIS CORE</h1>
-<p>Personal AI project.</p>
+<!-- Narahat olmayın: bu düymələr yuxarı sağ küncdə, kiçik ölçüdə görünür -->
+<div class="app" id="app">
+
+  <header class="hud">
+    <button class="icon-btn" id="btn-menu" aria-label="Yaddaş və profil paneli" title="Yaddaş və profil">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+    </button>
+
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div class="brand-text">
+        <h1>JARVIS</h1>
+        <p id="status-text">Sistem hazırlanır…</p>
+      </div>
+    </div>
+
+    <div class="hud-actions">
+      <button class="icon-btn" id="btn-mute" aria-label="Səsi aç/bağla" title="Səs">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z" /><path d="M16 9c1.3 1 1.3 5 0 6" /><path d="M19 6c2.6 2.2 2.6 9.8 0 12" /></svg>
+      </button>
+      <button class="icon-btn" id="btn-wake" aria-label="Oyanma sözü rejimi" title="“Jarvis” oyanma sözü">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M4.5 8a9 9 0 0 0 0 8M7.5 9.5a6 6 0 0 0 0 5M19.5 8a9 9 0 0 1 0 8M16.5 9.5a6 6 0 0 1 0 5" /></svg>
+      </button>
+      <button class="icon-btn" id="btn-settings" aria-label="Tənzimləmələr" title="Tənzimləmələr">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" /></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="core-wrap">
+      <div class="core" id="core" data-state="idle">
+        <canvas id="viz" width="360" height="360" aria-hidden="true"></canvas>
+        <div class="core-ring ring-a" aria-hidden="true"></div>
+        <div class="core-ring ring-b" aria-hidden="true"></div>
+        <div class="core-orb" aria-hidden="true"></div>
+      </div>
+      <p class="core-caption" id="core-caption">Sistem onlayn</p>
+    </div>
+
+    <div class="transcript" id="transcript" aria-live="polite"></div>
+    <div class="quick" id="quick"></div>
+  </main>
+
+  <footer class="composer">
+    <div class="attach-preview" id="attach-preview" hidden>
+      <img id="attach-img" alt="Əlavə edilmiş şəkil" />
+      <button class="icon-btn small" id="btn-attach-clear" aria-label="Şəkli sil">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+
+    <div class="composer-row">
+      <button class="icon-btn" id="btn-attach" aria-label="Şəkil əlavə et" title="Şəkil əlavə et">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5" /><circle cx="8.5" cy="10" r="1.6" /><path d="M21 16l-5-5-6 6" /></svg>
+      </button>
+      <input type="file" id="file-input" accept="image/*" hidden />
+
+      <textarea id="input" rows="1" placeholder="JARVIS-ə yazın və ya mikrofonu basın…" enterkeyhint="send"></textarea>
+
+      <button class="icon-btn mic" id="btn-mic" aria-label="Danışmaq" title="Danışmaq">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
+      </button>
+
+      <button class="icon-btn send" id="btn-send" aria-label="Göndər" title="Göndər">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 8 6 8-16-8Z" /></svg>
+      </button>
+    </div>
+    <p class="composer-hint">Enter — göndər · Shift+Enter — yeni sətir · Mikrofon canlı nitqi tanıyır</p>
+  </footer>
+</div>
+
+<!-- Yaddaş / profil paneli -->
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <h2>Yaddaş</h2>
+    <button class="icon-btn" id="btn-drawer-close" aria-label="Bağla">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+    </button>
+  </div>
+
+  <div class="drawer-body">
+    <section class="card">
+      <h3>Sizin haqqınızda</h3>
+      <div class="field"><label for="pf-name">Ad</label><input id="pf-name" type="text" autocomplete="name" placeholder="Adınız" /></div>
+      <div class="field"><label for="pf-city">Şəhər</label><input id="pf-city" type="text" placeholder="Bakı" /></div>
+      <div class="field"><label for="pf-interests">Maraqlar (vergüllə)</label><input id="pf-interests" type="text" placeholder="proqramlaşdırma, futbol, astronomiya" /></div>
+      <div class="field"><label for="pf-about">Qeyd</label><textarea id="pf-about" rows="2" placeholder="JARVIS sizin haqqınızda nə bilməlidir?"></textarea></div>
+      <button class="btn primary" id="pf-save">Yadda saxla</button>
+    </section>
+
+    <section class="card">
+      <h3>Xatirələr <span class="count" id="facts-count">0</span></h3>
+      <ul class="mem-list" id="facts-list"></ul>
+      <div class="field inline">
+        <input id="fact-input" type="text" placeholder="Yeni xatirə: “Cümə axşamı idmana gedirəm”" />
+        <button class="btn small primary" id="fact-add">Əlavə et</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Qeydlər</h3>
+      <ul class="mem-list" id="notes-list"></ul>
+      <p class="hint">Qeydləri JARVIS-dən xahiş edərək də yarada bilərsiniz.</p>
+    </section>
+
+    <section class="card">
+      <h3>Cihaz imkanları</h3>
+      <ul class="cap-list" id="cap-list"></ul>
+      <p class="hint">Bəzi imkanlar brauzerdən asılıdır. Dəstəklənmirsə, JARVIS bunu açıq deyəcək.</p>
+    </section>
+
+    <section class="card">
+      <h3>Məlumat</h3>
+      <p class="hint">Bütün yaddaş bu cihazın brauzerində (localStorage) saxlanılır. Serverə heç nə göndərilmir.</p>
+      <p class="hint" id="app-version"></p>
+      <a class="btn small" id="apk-download" href="jarvis-release.apk" download hidden>APK-nı yüklə (62 KB)</a>
+      <div class="btn-row">
+        <button class="btn small" id="data-export">İxrac et</button>
+        <button class="btn small" id="data-import">İmport et</button>
+        <button class="btn small danger" id="data-clear">Söhbəti təmizlə</button>
+      </div>
+      <input type="file" id="import-file" accept="application/json" hidden />
+    </section>
+  </div>
+</aside>
+<div class="scrim" id="scrim" hidden></div>
+
+<!-- Tənzimləmələr -->
+<div class="overlay" id="settings-modal" hidden>
+  <div class="panel modal">
+    <div class="panel-head">
+      <h2>Tənzimləmələr</h2>
+      <button class="icon-btn" id="settings-close" aria-label="Bağla">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+    <div class="panel-body">
+      <h3>Beyin</h3>
+      <div class="field"><label for="st-provider">Provayder</label><select id="st-provider"></select></div>
+      <div class="field"><label for="st-key">API açarı</label><input id="st-key" type="password" autocomplete="off" spellcheck="false" placeholder="AIza… / sk-…" /></div>
+      <div class="field"><label for="st-model">Model</label><input id="st-model" type="text" spellcheck="false" placeholder="gemini-2.5-flash" /></div>
+      <div class="field"><label for="st-base">Baza URL (istəyə bağlı)</label><input id="st-base" type="text" spellcheck="false" placeholder="https://…/v1" /></div>
+      <p class="hint" id="st-hint">Açar yalnız bu brauzerdə saxlanılır və birbaşa provayderə göndərilir. Ollama üçün açar lazım deyil.</p>
+
+      <h3>Səs</h3>
+      <div class="field"><label for="st-voice">Səs</label><select id="st-voice"></select></div>
+      <div class="field two">
+        <div><label for="st-rate">Sürət <span id="rate-val">1.0</span></label><input id="st-rate" type="range" min="0.6" max="1.5" step="0.05" /></div>
+        <div><label for="st-pitch">Ton <span id="pitch-val">0.9</span></label><input id="st-pitch" type="range" min="0.5" max="1.5" step="0.05" /></div>
+      </div>
+      <label class="switch"><input type="checkbox" id="st-speak" /><span>JARVIS cavabları səslə desin</span></label>
+      <label class="switch"><input type="checkbox" id="st-wake" /><span>“Jarvis” oyanma sözü ilə dinləmə</span></label>
+
+      <h3>Axtarış</h3>
+      <div class="field"><label for="st-search">Tavily API açarı (istəyə bağlı)</label><input id="st-search" type="password" autocomplete="off" spellcheck="false" placeholder="tvly-…" /></div>
+      <p class="hint">Açar olmadan JARVIS Vikipediya vasitəsilə axtarış edir.</p>
+
+      <div class="btn-row end">
+        <button class="btn" id="settings-cancel">Ləğv et</button>
+        <button class="btn primary" id="settings-save">Yadda saxla</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- İlk quraşdırma -->
+<div class="overlay" id="onboarding">
+  <div class="panel modal intro">
+    <div class="intro-orb" aria-hidden="true"></div>
+    <h2>Salam. Mən JARVIS-əm.</h2>
+    <p class="lead">Şəxsi köməkçiniz. Başlamaq üçün bir neçə saniyə lazımdır.</p>
+
+    <div class="field"><label for="ob-name">Adınız nədir?</label><input id="ob-name" type="text" autocomplete="name" placeholder="Məsələn: Elvin" /></div>
+    <div class="field"><label for="ob-provider">Beyin (provayder)</label><select id="ob-provider"></select></div>
+    <div class="field"><label for="ob-key">API açarı</label><input id="ob-key" type="password" autocomplete="off" spellcheck="false" placeholder="AIza… / sk-…" /></div>
+    <p class="hint" id="ob-hint">Açar yalnız bu cihazda qalır. Gemini üçün pulsuz açar: aistudio.google.com/apikey</p>
+
+    <button class="btn primary wide" id="ob-start">JARVIS-i işə sal</button>
+    <button class="btn ghost wide" id="ob-skip">Açarsız davam et (məhdud rejim)</button>
+    <p class="hint center">Danışıq üçün mikrofon icazəsi, səs üçün brauzerin nitq sintezi istifadə olunur.</p>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap" aria-live="polite"></div>
+
+<script type="module" src="assets/js/app.js"></script>
 </body>
 </html>

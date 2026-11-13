@@ -1,0 +1,16 @@
+# APK build artefaktları
+android/build/
+android/assets/
+android/optimize/node_modules/
+*.apk
+!jarvis-release.apk
+*.idsig
+*.keystore
+*.jks
+
+# İmzalama açarları — HEÇ VAXT commit olunmamalıdır
+android/keystore/
+
+# Sistem faylları
+.DS_Store
+Thumbs.db
