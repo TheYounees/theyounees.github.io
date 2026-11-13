@@ -5,7 +5,7 @@ import { ui, $ } from './ui.js';
 import { voice } from './voice.js';
 import { PROVIDERS, providerConfig } from './config.js';
 import { TOOL_DEFS, executeTool } from './tools.js';
-import { buildSystemPrompt, runTurn, localFallback, fetchModels, pickModel } from './llm.js';
+import { buildSystemPrompt, runTurn, fetchModels, pickModel } from './llm.js';
 
 let busy = false;
 let pendingImage = null;
@@ -69,6 +69,9 @@ function init() {
   bindEvents();
   ui.setStatus(modeLabel());
 
+  // Köhnə versiyadan qalmış provayder adı artıq mövcud deyilsə — Gemini.
+  if (!PROVIDERS[store.state.settings.provider]) store.setSettings({ provider: 'gemini', model: '' });
+
   if (!store.state.onboarded) {
     $('#onboarding').hidden = false;
     $('#ob-provider').value = store.state.settings.provider;
@@ -87,10 +90,30 @@ function init() {
   window.addEventListener('jarvis:timer', onTimerComplete);
   showShellInfo();
   exposeApkDownload();
+  refreshKeyChip();
+}
+
+/** Açar yoxdursa yuxarıda görünən "açarı qoş" düyməsi. */
+function refreshKeyChip() {
+  const quick = $('#quick');
+  if (!quick) return;
+  const existing = $('#key-chip');
+  if (store.state.settings.apiKey) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+  const chip = document.createElement('button');
+  chip.id = 'key-chip';
+  chip.type = 'button';
+  chip.className = 'chip chip-key';
+  chip.textContent = '🔑 Gemini açarını qoş';
+  chip.addEventListener('click', () => openSettings());
+  quick.prepend(chip);
 }
 
 function modeLabel() {
-  if (needsKey() && !store.state.settings.apiKey) return 'Məhdud rejim — açar yoxdur';
+  if (!store.state.settings.apiKey) return 'Açar lazımdır — Tənzimləmələr';
   return 'Onlayn';
 }
 
@@ -149,10 +172,9 @@ async function send(text) {
       return;
     }
 
-    if (needsKey() && !settings.apiKey) {
-      await wait(450);
-      const reply = localFallback(content, { settings, profile: store.state.profile });
-      deliver(reply, []);
+    if (!settings.apiKey) {
+      await wait(200);
+      deliver(NO_KEY_MESSAGE, []);
       return;
     }
 
@@ -212,6 +234,10 @@ async function send(text) {
 /* pendingImageData — şəkil birbaşa yaddaşa yazılmır, yalnız bu sorğu üçün istifadə olunur. */
 let pendingImageData = null;
 
+/** Açar yoxdursa dərhal izah verən mesaj — saniyələrlə gözləmək yoxdur. */
+const NO_KEY_MESSAGE =
+  'Beyin qoşulmayıb: Gemini API açarı yoxdur.\n\n☰ → Tənzimləmələr → "API açarı" sahəsinə açarı yaz → "Gətir" (açarı yoxlayır) → "Yadda saxla".\nAçarı burada pulsuz ala bilərsən: aistudio.google.com/apikey';
+
 /** Fənər, saat, tarix kimi əmrləri modelə göndərmədən dərhal icra edir. */
 async function tryLocalCommand(text) {
   const t = String(text).toLowerCase().replace(/[!?.…,]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -268,56 +294,19 @@ function logTool(name, args, output) {
 }
 
 /**
- * Provayder cavab vermədikdə: model düzəlişi → yenidən cəhd → pulsuz ehtiyat beyin.
- * Beləliklə istifadəçi heç vaxt boş "xəta" divarı ilə qalmır.
+ * Yalnız Gemini. Cavab verməzsə: model adı köhnəlibsə düzəldib bir dəfə təkrar cəhd edirik.
+ * Başqa provayderə keçid YOXDUR — əks halda istifadəçi dəqiqələrlə limit gözləyir.
  */
 async function runWithFailover(settings, messages) {
-  const attempt = (s, toolDefs = TOOL_DEFS) =>
-    runTurn({ settings: s, messages, toolDefs, executeTool, signal: abortCtrl?.signal, onTool: logTool, onWait: handleWait });
+  const attempt = (s) =>
+    runTurn({ settings: s, messages, toolDefs: TOOL_DEFS, executeTool, signal: abortCtrl?.signal, onTool: logTool });
 
   try {
     return await attempt(settings);
   } catch (err) {
     if (err?.name === 'AbortError') throw err;
-
-    if (await recoverModel(settings, err)) {
-      try {
-        return await attempt(store.state.settings);
-      } catch (retryErr) {
-        if (retryErr?.name === 'AbortError') throw retryErr;
-        return failoverToFree(messages, retryErr);
-      }
-    }
-
-    return failoverToFree(messages, err);
-  }
-}
-
-/** Açar/kvota problemi olanda açarsız pulsuz beyinə keçir (alətlər söndürülür). */
-async function failoverToFree(messages, originalError) {
-  const current = store.state.settings;
-  if (current.provider === 'pollinations') throw originalError;
-
-  ui.addMessage({ role: 'tool', content: 'ehtiyat rejim · pulsuz beyin' });
-  try {
-    return await runTurn({
-      settings: {
-        ...current,
-        provider: 'pollinations',
-        apiKey: '',
-        baseUrl: '',
-        model: PROVIDERS.pollinations.model
-      },
-      messages,
-      toolDefs: [],
-      executeTool,
-      signal: abortCtrl?.signal,
-      onTool: logTool,
-      onWait: handleWait
-    });
-  } catch (err) {
-    if (err?.name === 'AbortError') throw err;
-    throw new Error(`${originalError.message} (pulsuz rejim də cavab vermədi: ${err.message})`);
+    if (await recoverModel(settings, err)) return attempt(store.state.settings);
+    throw err;
   }
 }
 
@@ -512,7 +501,8 @@ function saveSettings() {
   ui.setWakeState(Boolean(store.state.settings.wakeWord));
   ui.closeSettings();
   ui.setStatus(modeLabel());
-  ui.toast('Tənzimləmələr yadda saxlanıldı.');
+  refreshKeyChip();
+  ui.toast(key ? 'Tənzimləmələr yadda saxlanıldı.' : 'Açar boşdur — beyin işləməyəcək.');
 
   if (!store.state.settings.wakeWord) voice.stopWakeWord();
   else startWake();
@@ -717,8 +707,8 @@ function bindEvents() {
   });
 
   $('#ob-skip').addEventListener('click', () => {
-    // Açarsız pulsuz rejim — heç bir qurulum olmadan dərhal işləyir.
-    store.setSettings({ provider: 'pollinations', apiKey: '', model: PROVIDERS.pollinations.model, baseUrl: '' });
+    // Açar olmadan davam: brauzer əmrləri (fənər, saat, yaddaş) yenə işləyir.
+    store.setSettings({ provider: 'gemini' });
     store.state.onboarded = true;
     store.save();
     $('#onboarding').hidden = true;

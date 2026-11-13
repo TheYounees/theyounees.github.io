@@ -84,6 +84,9 @@ function errorMessage(status, body) {
     return 'API açarı qəbul edilmədi. Tənzimləmələrdən açarı yenidən yoxlayın.';
   }
   if (status === 402) return 'Pulsuz rejimin limiti doldu (402). Bir az sonra yenidən yazın.';
+  if (status === 400) {
+    return `Açar və ya sorğu qəbul edilmədi (400).${detail ? ' ' + detail : ''} Tənzimləmələrdə “Gətir” düyməsi ilə açarı yoxlayın.`;
+  }
   if (status === 401 || status === 403) return 'API açarı qəbul edilmədi (401/403). Tənzimləmələrdən açarı yoxlayın.';
   if (status === 429) return 'Limit aşıldı (429). Bir az sonra yenidən cəhd edin və ya başqa model seçin.';
   if (status === 404) {
@@ -94,10 +97,8 @@ function errorMessage(status, body) {
 }
 
 /** Provayderdən mövcud model siyahısını götürür. */
-const KEYLESS_PROVIDERS = new Set(['ollama', 'pollinations']);
-
 export async function fetchModels(settings) {
-  if (!settings.apiKey && !KEYLESS_PROVIDERS.has(settings.provider)) {
+  if (!settings.apiKey) {
     throw new Error('Əvvəlcə API açarını daxil edin.');
   }
 
@@ -112,13 +113,6 @@ export async function fetchModels(settings) {
       .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
       .map((m) => String(m.name || '').replace(/^models\//, ''))
       .filter((id) => id && !/embedding|aqa|imagen|veo|tts|image|live|native-audio|learnlm/i.test(id));
-  }
-
-  if (settings.provider === 'pollinations') {
-    const res = await fetch('https://text.pollinations.ai/models');
-    if (!res.ok) throw new Error(errorMessage(res.status, null));
-    const data = await res.json();
-    return (Array.isArray(data) ? data : []).map((m) => m?.name).filter(Boolean);
   }
 
   const cfg = providerConfig(settings);
@@ -185,9 +179,9 @@ function pause(ms, signal) {
 function retryWaitMs(status, body) {
   const detail = String(body?.error?.message || body?.message || '');
   const parsed = Number((detail.match(/retry after (\d+)\s*s/i) || [])[1] || 0);
-  if (parsed > 0) return Math.min(parsed * 1000 + 600, 75000);
-  if (status === 402) return 46000;
-  if (status === 429) return 5000;
+  if (parsed > 0) return Math.min(parsed * 1000 + 400, 6000);
+  if (status === 402) return 4000;
+  if (status === 429) return 4000;
   return 0;
 }
 
@@ -283,6 +277,8 @@ export async function chatRequest({ settings, messages, tools, signal, onWait })
     const text = await res.text();
     let body = null;
     try { body = text ? JSON.parse(text) : null; } catch { /* mətn cavabı */ }
+    // Gemini bəzən xətanı massiv içində qaytarır: [{ error: {...} }]
+    if (Array.isArray(body)) body = body[0] || null;
 
     if (res.ok) {
       if (!body) throw new Error('Provayder boş cavab qaytardı.');
@@ -397,6 +393,7 @@ export async function runTurn({ settings, messages, toolDefs, executeTool, onToo
   const convo = [...messages];
   const toolsUsed = [];
   const actions = [];
+  const allowedTools = new Set((toolDefs || []).map((t) => t?.function?.name).filter(Boolean));
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     let result;
@@ -427,10 +424,16 @@ export async function runTurn({ settings, messages, toolDefs, executeTool, onToo
     for (const call of result.toolCalls) {
       const args = parseArgs(call.argsRaw);
       let output;
-      try {
-        output = await executeTool(call.name, args);
-      } catch (err) {
-        output = { ok: false, error: err?.message || 'Alət icra olunmadı.' };
+
+      if (allowedTools.size && !allowedTools.has(call.name)) {
+        // Model uydurma alət adı çağıra bilər — onu düzgün siyahıyla geri qaytarırıq.
+        output = { ok: false, error: `"${call.name}" aləti yoxdur. Mövcud alətlər: ${[...allowedTools].join(', ')}` };
+      } else {
+        try {
+          output = await executeTool(call.name, args);
+        } catch (err) {
+          output = { ok: false, error: err?.message || 'Alət icra olunmadı.' };
+        }
       }
 
       if (output?.action) actions.push(output.action);

@@ -427,6 +427,13 @@ body::before {
   transition: background 0.16s ease, color 0.16s ease;
 }
 .chip:hover { background: rgba(56, 232, 255, 0.14); color: #fff; }
+.chip-key {
+  border-color: rgba(255, 186, 74, 0.55);
+  background: rgba(255, 176, 60, 0.14);
+  color: #ffcf80;
+  font-weight: 600;
+}
+.chip-key:hover { background: rgba(255, 176, 60, 0.24); color: #fff; }
 
 /* ---------- composer ---------- */
 .composer {

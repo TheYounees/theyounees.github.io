@@ -1,14 +1,6 @@
 /* Provayderlər, model seçimləri və standart tənzimləmələr. */
 
 export const PROVIDERS = {
-  pollinations: {
-    label: 'Pulsuz (açarsız)',
-    baseUrl: 'https://text.pollinations.ai/openai',
-    model: 'openai-fast',
-    keyHint: 'Açar lazım deyil. Pulsuz rejim: təxminən 45 saniyədə 1 cavab, alətlər məhdud.',
-    needsKey: false,
-    vision: false
-  },
   gemini: {
     label: 'Google Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',

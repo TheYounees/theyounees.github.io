@@ -74,6 +74,7 @@ R8-in real faydası: dex 11% kiçildi, köməkçi siniflər obfuscate olundu (`M
 
 ### Versiya tarixçəsi
 
+- **2.0** (versionCode 11) — pulsuz ehtiyat rejimi tamamilə çıxarıldı (113 saniyəlik gözləmənin səbəbi); açar yoxdursa dərhal "Açar lazımdır" mesajı və görünən "🔑 Gemini açarını qoş" düyməsi; 400 xətası üçün aydın izah; modelin uydurma alət adları rədd edilir.
 - **1.9** (versionCode 10) — beyin yalnız Gemini (digər provayderlər gizlədildi), açar yazılanda provayder avtomatik Gemini olur, sorğu timeout-u 15 saniyə, fənər/saat kimi əmrlər modelə getmədən dərhal icra olunur.
 - **1.8** (versionCode 9) — provayder cavab verməyəndə sorğu 45 saniyədən sonra kəsilir (əbədi spinner yox), canlı saniyə sayğacı və göndərmə düyməsi ilə dayandırma.
 - **1.7** (versionCode 8) — pulsuz rejim limiti (402/429) xəta kimi göstərilmir: JARVIS sayğacla gözləyir və cavabı avtomatik tamamlayır.
