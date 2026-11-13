@@ -154,26 +154,7 @@ async function send(text) {
       { role: 'user', content: userContent }
     ];
 
-    const result = await runTurn({
-      settings,
-      messages,
-      toolDefs: TOOL_DEFS,
-      executeTool,
-      signal: abortCtrl.signal,
-      onTool: logTool
-    }).catch(async (err) => {
-      // Model adı köhnəlibsə (404) — provayderdən siyahını çəkib avtomatik yenidən cəhd edirik.
-      const recovered = await recoverModel(settings, err);
-      if (!recovered) throw err;
-      return runTurn({
-        settings: store.state.settings,
-        messages,
-        toolDefs: TOOL_DEFS,
-        executeTool,
-        signal: abortCtrl.signal,
-        onTool: logTool
-      });
-    });
+    const result = await runWithFailover(settings, messages);
 
     deliver(result.text || 'Cavab formalaşmadı.', result.actions || []);
   } catch (err) {
@@ -202,6 +183,59 @@ function logTool(name, args, output) {
   const detail = args?.city || args?.query || args?.action || args?.text || '';
   const line = `${TOOL_LABELS[name] || name}${detail ? ' · ' + String(detail).slice(0, 60) : ''}${output?.ok === false ? ' · alınmadı' : ''}`;
   ui.addMessage({ role: 'tool', content: line });
+}
+
+/**
+ * Provayder cavab vermədikdə: model düzəlişi → yenidən cəhd → pulsuz ehtiyat beyin.
+ * Beləliklə istifadəçi heç vaxt boş "xəta" divarı ilə qalmır.
+ */
+async function runWithFailover(settings, messages) {
+  const attempt = (s, toolDefs = TOOL_DEFS) =>
+    runTurn({ settings: s, messages, toolDefs, executeTool, signal: abortCtrl?.signal, onTool: logTool });
+
+  try {
+    return await attempt(settings);
+  } catch (err) {
+    if (err?.name === 'AbortError') throw err;
+
+    if (await recoverModel(settings, err)) {
+      try {
+        return await attempt(store.state.settings);
+      } catch (retryErr) {
+        if (retryErr?.name === 'AbortError') throw retryErr;
+        return failoverToFree(messages, retryErr);
+      }
+    }
+
+    return failoverToFree(messages, err);
+  }
+}
+
+/** Açar/kvota problemi olanda açarsız pulsuz beyinə keçir (alətlər söndürülür). */
+async function failoverToFree(messages, originalError) {
+  const current = store.state.settings;
+  if (current.provider === 'pollinations') throw originalError;
+
+  ui.addMessage({ role: 'tool', content: 'ehtiyat rejim · pulsuz beyin' });
+  try {
+    return await runTurn({
+      settings: {
+        ...current,
+        provider: 'pollinations',
+        apiKey: '',
+        baseUrl: '',
+        model: PROVIDERS.pollinations.model
+      },
+      messages,
+      toolDefs: [],
+      executeTool,
+      signal: abortCtrl?.signal,
+      onTool: logTool
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') throw err;
+    throw new Error(`${originalError.message} (pulsuz rejim də cavab vermədi: ${err.message})`);
+  }
 }
 
 /** 404 zamanı model siyahısını çəkib ən uyğun modeli təyin edir. */

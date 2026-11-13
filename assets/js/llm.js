@@ -80,6 +80,10 @@ function endpoint(settings) {
 
 function errorMessage(status, body) {
   const detail = body?.error?.message || body?.message || '';
+  if (/api key|invalid key|unauthorized/i.test(detail) && status < 500) {
+    return 'API açarı qəbul edilmədi. Tənzimləmələrdən açarı yenidən yoxlayın.';
+  }
+  if (status === 402) return 'Pulsuz rejimin limiti doldu (402). 45 saniyə gözləyib yenidən yazın.';
   if (status === 401 || status === 403) return 'API açarı qəbul edilmədi (401/403). Tənzimləmələrdən açarı yoxlayın.';
   if (status === 429) return 'Limit aşıldı (429). Bir az sonra yenidən cəhd edin və ya başqa model seçin.';
   if (status === 404) {
@@ -90,8 +94,10 @@ function errorMessage(status, body) {
 }
 
 /** Provayderdən mövcud model siyahısını götürür. */
+const KEYLESS_PROVIDERS = new Set(['ollama', 'pollinations']);
+
 export async function fetchModels(settings) {
-  if (!settings.apiKey && settings.provider !== 'ollama') {
+  if (!settings.apiKey && !KEYLESS_PROVIDERS.has(settings.provider)) {
     throw new Error('Əvvəlcə API açarını daxil edin.');
   }
 
@@ -105,6 +111,13 @@ export async function fetchModels(settings) {
       .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
       .map((m) => String(m.name || '').replace(/^models\//, ''))
       .filter((id) => id && !/embedding|aqa|imagen|veo|tts|image|live|native-audio|learnlm/i.test(id));
+  }
+
+  if (settings.provider === 'pollinations') {
+    const res = await fetch('https://text.pollinations.ai/models');
+    if (!res.ok) throw new Error(errorMessage(res.status, null));
+    const data = await res.json();
+    return (Array.isArray(data) ? data : []).map((m) => m?.name).filter(Boolean);
   }
 
   const cfg = providerConfig(settings);
@@ -147,6 +160,23 @@ export function pickModel(ids, provider) {
   return scored[0].id;
 }
 
+const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_HTTP_ATTEMPTS = 3;
+
+function pause(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(Object.assign(new Error('Sorğu dayandırıldı.'), { name: 'AbortError' }));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(Object.assign(new Error('Sorğu dayandırıldı.'), { name: 'AbortError' }));
+    }, { once: true });
+  });
+}
+
 export async function chatRequest({ settings, messages, tools, signal }) {
   const { cfg, url } = endpoint(settings);
   const headers = { 'Content-Type': 'application/json' };
@@ -166,43 +196,107 @@ export async function chatRequest({ settings, messages, tools, signal }) {
     payload.tool_choice = 'auto';
   }
 
-  let res;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-      signal
-    });
-  } catch (err) {
-    if (err.name === 'AbortError') throw err;
-    throw new Error('Şəbəkəyə qoşulmaq alınmadı. İnterneti yoxlayın və ya endpoint ünvanını düzəldin.');
+  let lastError = null;
+
+  // Pulsuz tier-lərdə 429/5xx (model overloaded) tez-tez olur — qısa fasilə ilə yenidən cəhd edirik.
+  for (let attempt = 0; attempt < MAX_HTTP_ATTEMPTS; attempt++) {
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      lastError = new Error('Şəbəkəyə qoşulmaq alınmadı. İnterneti yoxlayın və ya endpoint ünvanını düzəldin.');
+      lastError.status = 0;
+      if (attempt < MAX_HTTP_ATTEMPTS - 1) {
+        await pause(800 * (attempt + 1), signal);
+        continue;
+      }
+      throw lastError;
+    }
+
+    const text = await res.text();
+    let body = null;
+    try { body = text ? JSON.parse(text) : null; } catch { /* mətn cavabı */ }
+
+    if (res.ok) {
+      if (!body) throw new Error('Provayder boş cavab qaytardı.');
+
+      const choice = body.choices?.[0];
+      const message = choice?.message || {};
+      const toolCalls = (message.tool_calls || []).map((tc) => ({
+        id: tc.id,
+        name: tc.function?.name,
+        argsRaw: tc.function?.arguments || '{}'
+      }));
+
+      return {
+        content: typeof message.content === 'string' ? message.content : '',
+        toolCalls,
+        finishReason: choice?.finish_reason || null,
+        usage: body.usage || null
+      };
+    }
+
+    lastError = new Error(errorMessage(res.status, body));
+    lastError.status = res.status;
+
+    if (RETRY_STATUSES.has(res.status) && attempt < MAX_HTTP_ATTEMPTS - 1) {
+      await pause(res.status === 429 ? 2400 : 1000 * (attempt + 1), signal);
+      continue;
+    }
+    throw lastError;
   }
 
-  const text = await res.text();
-  let body = null;
-  try { body = text ? JSON.parse(text) : null; } catch { /* mətn cavabı */ }
-
-  if (!res.ok) throw new Error(errorMessage(res.status, body));
-  if (!body) throw new Error('Provayder boş cavab qaytardı.');
-
-  const choice = body.choices?.[0];
-  const message = choice?.message || {};
-  const toolCalls = (message.tool_calls || []).map((tc) => ({
-    id: tc.id,
-    name: tc.function?.name,
-    argsRaw: tc.function?.arguments || '{}'
-  }));
-
-  return {
-    content: typeof message.content === 'string' ? message.content : '',
-    toolCalls,
-    finishReason: choice?.finish_reason || null,
-    usage: body.usage || null
-  };
+  throw lastError || new Error('Cavab alınmadı.');
 }
 
 /* ---------------- alət dövrü ---------------- */
+
+/** Alət nəticəsini insan dilinə çevirir (pulsuz rejimdə model əvəzinə biz yazırıq). */
+function formatToolOutput(name, out) {
+  if (!out) return 'nəticə yoxdur';
+  if (out.ok === false) return out.error || out.message || 'alınmadı';
+
+  if (name === 'get_weather' && out.indi) {
+    const i = out.indi;
+    return `${i.temperatur}, hiss olunan ${i.hiss_olunan}, ${i.veziyyet}, külək ${i.külək} (${out.yer})`;
+  }
+  if (name === 'get_time') return `${out.tarix}, saat ${out.saat}`;
+  if (name === 'calculate') return `${out.ifadə} = ${out.nəticə}`;
+  if (name === 'set_timer') return out.message || out.xəbərdarlıq || 'taymer quruldu';
+  if (name === 'recall_memory') {
+    const facts = out['xatirələr'] || [];
+    return facts.length ? facts.slice(0, 3).join('; ') : 'yaddaşda uyğun qeyd yoxdur';
+  }
+  if (Array.isArray(out['nəticələr'])) {
+    return out['nəticələr'].slice(0, 2).map((r) => r['başlıq'] || r.title || r['xülasə'] || '').filter(Boolean).join(' | ') || 'nəticə tapılmadı';
+  }
+
+  const text = out.text || out.message || out.summary || out['nəticə'];
+  if (text) return String(text).slice(0, 240);
+  return JSON.stringify(out).slice(0, 200);
+}
+
+function toolSummaryText(toolsUsed) {
+  const lines = toolsUsed.slice(-3).map((t) => `• ${t.name === 'get_weather' ? 'Hava' : TOOL_TITLES[t.name] || t.name}: ${formatToolOutput(t.name, t.result)}`);
+  return `${lines.join('\n')}\n\nAçarsız rejimdə cavab limiti olduğu üçün ətraflı şərh verə bilmirəm — 45 saniyə sonra davam edə bilərik.`;
+}
+
+const TOOL_TITLES = {
+  get_time: 'Vaxt',
+  web_search: 'Axtarış',
+  calculate: 'Hesablama',
+  set_timer: 'Taymer',
+  remember: 'Yaddaş',
+  recall_memory: 'Yaddaş',
+  add_note: 'Qeyd',
+  device_action: 'Cihaz'
+};
 
 function parseArgs(raw) {
   if (!raw) return {};
@@ -225,7 +319,16 @@ export async function runTurn({ settings, messages, toolDefs, executeTool, onToo
   const actions = [];
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const result = await chatRequest({ settings, messages: convo, tools: toolDefs, signal });
+    let result;
+    try {
+      result = await chatRequest({ settings, messages: convo, tools: toolDefs, signal });
+    } catch (err) {
+      // Pulsuz rejimdə limit alətdən sonra bitə bilər — əlimizdəki nəticəni istifadəçiyə veririk.
+      if (toolsUsed.length && (err.status === 402 || err.status === 429)) {
+        return { text: toolSummaryText(toolsUsed), toolsUsed, actions, rawMessages: convo };
+      }
+      throw err;
+    }
 
     if (!result.toolCalls.length) {
       return { text: result.content.trim(), toolsUsed, actions, rawMessages: convo };
@@ -289,14 +392,12 @@ export function localFallback(input, { settings, profile }) {
 
   if (/^(salam|salaam|hey|hi|hello|necəsən|necesen)/.test(text.trim())) {
     const name = profile.name ? `, ${profile.name}` : '';
-    return `Salam${name}. Mən JARVIS-əm. Hazırda beynim qoşulmayıb — yəni söhbəti tam aparmaq üçün API açarı lazımdır. Amma saat, hava və cihaz əmrləri işləyir.
-
-Tənzimləmələr → Beyin bölməsindən açarı əlavə et, sonra davam edək.`;
+    return `Salam${name}. Mən JARVIS-əm. Hazırda beynim qoşulmayıb. Tənzimləmələr → Beyin bölməsindən ya pulsuz rejimi (açarsız) seç, ya da API açarı əlavə et — sonra tam söhbət edə biləcəyik.`;
   }
 
   if (/saat|vaxt|tarix/.test(text)) {
     return `İndi saat ${formatAzTime(now)}, ${formatAzDate(now)}.`;
   }
 
-  return `Beyin hələ qoşulmayıb, ona görə bu suala düzgün cavab verə bilmirəm. Tənzimləmələr → Beyin bölməsindən API açarı əlavə edin (Gemini üçün pulsuzdur), sonra hər şey işləyəcək.`;
+  return `Beyin hələ qoşulmayıb, ona görə bu suala düzgün cavab verə bilmirəm. Tənzimləmələr → Beyin bölməsindən “Pulsuz (açarsız)” rejimini seçin və ya Gemini açarı əlavə edin — ikisi də pulsuzdur.`;
 }

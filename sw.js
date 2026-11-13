@@ -1,6 +1,6 @@
 /* JARVIS service worker — yalnız tətbiq qabığını keşləyir.
    API sorğuları heç vaxt keşlənmir, şəxsi məlumat diskə yazılmır. */
-const CACHE = 'jarvis-shell-v2';
+const CACHE = 'jarvis-shell-v3';
 const SHELL = [
   './',
   './index.html',
