@@ -187,8 +187,39 @@ function retryWaitMs(status, body) {
   return 0;
 }
 
+/** Sorğu üçün vaxt məhdudiyyəti — provayder cavab verməzsə spinner əbədi qalmasın. */
+async function fetchWithTimeout(url, init, signal, timeoutMs) {
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctrl.abort();
+  }, timeoutMs);
+  const onAbort = () => ctrl.abort();
+
+  if (signal) {
+    if (signal.aborted) {
+      clearTimeout(timer);
+      throw Object.assign(new Error('Sorğu dayandırıldı.'), { name: 'AbortError' });
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  }
+
+  try {
+    const res = await fetch(url, { ...init, signal: ctrl.signal });
+    return { res, timedOut: false };
+  } catch (err) {
+    if (timedOut) return { res: null, timedOut: true };
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
 export async function chatRequest({ settings, messages, tools, signal, onWait }) {
   const { cfg, url } = endpoint(settings);
+  const timeoutMs = Number(settings.requestTimeout) > 0 ? Number(settings.requestTimeout) : 45000;
   const headers = { 'Content-Type': 'application/json' };
   if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
   if (settings.provider === 'openrouter') {
@@ -210,20 +241,35 @@ export async function chatRequest({ settings, messages, tools, signal, onWait })
 
   // Pulsuz tier-lərdə 429/5xx (model overloaded) tez-tez olur — qısa fasilə ilə yenidən cəhd edirik.
   for (let attempt = 0; attempt < MAX_HTTP_ATTEMPTS; attempt++) {
-    let res;
+    let res = null;
+    let timedOut = false;
     try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-        signal
-      });
+      const sent = await fetchWithTimeout(
+        url,
+        { method: 'POST', headers, body: JSON.stringify(payload) },
+        signal,
+        timeoutMs
+      );
+      res = sent.res;
+      timedOut = sent.timedOut;
     } catch (err) {
       if (err.name === 'AbortError') throw err;
       lastError = new Error('Şəbəkəyə qoşulmaq alınmadı. İnterneti yoxlayın və ya endpoint ünvanını düzəldin.');
       lastError.status = 0;
       if (attempt < MAX_HTTP_ATTEMPTS - 1) {
         await pause(800 * (attempt + 1), signal);
+        continue;
+      }
+      throw lastError;
+    }
+
+    if (timedOut) {
+      lastError = new Error('Provayder cavab vermədi (vaxt bitdi). Yenidən cəhd edin.');
+      lastError.status = 0;
+      lastError.timeout = true;
+      // Timeout-da yalnız bir dəfə təkrar cəhd: istifadəçi 3 dəqiqə spinner görməsin.
+      if (attempt === 0) {
+        await pause(1200, signal);
         continue;
       }
       throw lastError;

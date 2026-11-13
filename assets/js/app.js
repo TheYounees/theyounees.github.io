@@ -11,6 +11,7 @@ let busy = false;
 let pendingImage = null;
 let abortCtrl = null;
 let waitTimer = null;
+let thinkTimer = null;
 
 const TOOL_LABELS = {
   get_time: 'vaxt',
@@ -129,6 +130,16 @@ async function send(text) {
   ui.setCoreState('thinking', 'Düşünürəm…');
   ui.setStatus('Düşünürəm…');
 
+  // Canlı sayğac: spinner-in əbədi "donduğunu" düşünməyək.
+  let elapsed = 0;
+  clearInterval(thinkTimer);
+  thinkTimer = setInterval(() => {
+    elapsed += 1;
+    if (!busy || waitTimer) return;
+    ui.setStatus(`Düşünürəm… ${elapsed}s`);
+    ui.setCoreState('thinking', `Düşünürəm… ${elapsed}s`);
+  }, 1000);
+
   try {
     if (needsKey() && !settings.apiKey) {
       await wait(450);
@@ -159,9 +170,18 @@ async function send(text) {
 
     deliver(result.text || 'Cavab formalaşmadı.', result.actions || []);
   } catch (err) {
-    if (err.name === 'AbortError') return;
+    if (err.name === 'AbortError') {
+      ui.hideTyping();
+      ui.setCoreState('idle', 'Hazırdır');
+      ui.setStatus(modeLabel());
+      return;
+    }
     ui.hideTyping();
-    ui.addSystemMessage(err.message || 'Gözlənilməz xəta baş verdi.');
+    ui.addSystemMessage(
+      err.timeout
+        ? 'Cavab gəlmədi — provayder vaxtında cavab vermədi. Mesajı bir dəfə də göndərin və ya Tənzimləmələrdən başqa provayder/açar seçin.'
+        : err.message || 'Gözlənilməz xəta baş verdi.'
+    );
     ui.setCoreState('error', 'Xəta');
     ui.setStatus('Xəta');
     setTimeout(() => {
@@ -172,7 +192,9 @@ async function send(text) {
     }, 2800);
   } finally {
     clearInterval(waitTimer);
+    clearInterval(thinkTimer);
     waitTimer = null;
+    thinkTimer = null;
     pendingImageData = null;
     busy = false;
     abortCtrl = null;
@@ -511,6 +533,11 @@ function bindEvents() {
   });
 
   $('#btn-send').addEventListener('click', () => {
+    if (busy) {
+      abortCtrl?.abort();
+      ui.toast('Dayandırıldı.');
+      return;
+    }
     const text = input.value;
     input.value = '';
     autoGrow(input);
