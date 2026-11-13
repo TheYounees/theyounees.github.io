@@ -10,6 +10,7 @@ import { buildSystemPrompt, runTurn, localFallback, fetchModels, pickModel } fro
 let busy = false;
 let pendingImage = null;
 let abortCtrl = null;
+let waitTimer = null;
 
 const TOOL_LABELS = {
   get_time: 'vaxt',
@@ -170,6 +171,8 @@ async function send(text) {
       }
     }, 2800);
   } finally {
+    clearInterval(waitTimer);
+    waitTimer = null;
     pendingImageData = null;
     busy = false;
     abortCtrl = null;
@@ -178,6 +181,29 @@ async function send(text) {
 
 /* pendingImageData — şəkil birbaşa yaddaşa yazılmır, yalnız bu sorğu üçün istifadə olunur. */
 let pendingImageData = null;
+
+/** Limit (402/429) zamanı xəta yerine sayğaclı gözləmə göstəririk. */
+function handleWait(ms) {
+  clearInterval(waitTimer);
+  let left = Math.max(1, Math.ceil(ms / 1000));
+  const paint = () => {
+    ui.setStatus(`Limit — ${left} saniyə gözləyirəm…`);
+    ui.setCoreState('thinking', `Gözləyirəm… ${left}s`);
+  };
+  ui.addMessage({ role: 'tool', content: `pulsuz rejim limiti · ${left} saniyə gözləyirəm` });
+  paint();
+  waitTimer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) {
+      clearInterval(waitTimer);
+      waitTimer = null;
+      ui.setStatus('Davam edirəm…');
+      ui.setCoreState('thinking', 'Düşünürəm…');
+      return;
+    }
+    paint();
+  }, 1000);
+}
 
 function logTool(name, args, output) {
   const detail = args?.city || args?.query || args?.action || args?.text || '';
@@ -191,7 +217,7 @@ function logTool(name, args, output) {
  */
 async function runWithFailover(settings, messages) {
   const attempt = (s, toolDefs = TOOL_DEFS) =>
-    runTurn({ settings: s, messages, toolDefs, executeTool, signal: abortCtrl?.signal, onTool: logTool });
+    runTurn({ settings: s, messages, toolDefs, executeTool, signal: abortCtrl?.signal, onTool: logTool, onWait: handleWait });
 
   try {
     return await attempt(settings);
@@ -230,7 +256,8 @@ async function failoverToFree(messages, originalError) {
       toolDefs: [],
       executeTool,
       signal: abortCtrl?.signal,
-      onTool: logTool
+      onTool: logTool,
+      onWait: handleWait
     });
   } catch (err) {
     if (err?.name === 'AbortError') throw err;

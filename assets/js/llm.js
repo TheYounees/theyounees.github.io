@@ -83,7 +83,7 @@ function errorMessage(status, body) {
   if (/api key|invalid key|unauthorized/i.test(detail) && status < 500) {
     return 'API açarı qəbul edilmədi. Tənzimləmələrdən açarı yenidən yoxlayın.';
   }
-  if (status === 402) return 'Pulsuz rejimin limiti doldu (402). 45 saniyə gözləyib yenidən yazın.';
+  if (status === 402) return 'Pulsuz rejimin limiti doldu (402). Bir az sonra yenidən yazın.';
   if (status === 401 || status === 403) return 'API açarı qəbul edilmədi (401/403). Tənzimləmələrdən açarı yoxlayın.';
   if (status === 429) return 'Limit aşıldı (429). Bir az sonra yenidən cəhd edin və ya başqa model seçin.';
   if (status === 404) {
@@ -177,7 +177,17 @@ function pause(ms, signal) {
   });
 }
 
-export async function chatRequest({ settings, messages, tools, signal }) {
+/** 402/429 cavabından gözləmə müddətini çıxarır (millisaniyə). */
+function retryWaitMs(status, body) {
+  const detail = String(body?.error?.message || body?.message || '');
+  const parsed = Number((detail.match(/retry after (\d+)\s*s/i) || [])[1] || 0);
+  if (parsed > 0) return Math.min(parsed * 1000 + 600, 75000);
+  if (status === 402) return 46000;
+  if (status === 429) return 5000;
+  return 0;
+}
+
+export async function chatRequest({ settings, messages, tools, signal, onWait }) {
   const { cfg, url } = endpoint(settings);
   const headers = { 'Content-Type': 'application/json' };
   if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
@@ -244,6 +254,14 @@ export async function chatRequest({ settings, messages, tools, signal }) {
 
     lastError = new Error(errorMessage(res.status, body));
     lastError.status = res.status;
+
+    // Limit (402/429): xəta göstərmək əvəzinə gözləyib davam edirik.
+    const waitMs = retryWaitMs(res.status, body);
+    if (waitMs && attempt < MAX_HTTP_ATTEMPTS - 1) {
+      onWait?.(waitMs);
+      await pause(waitMs, signal);
+      continue;
+    }
 
     if (RETRY_STATUSES.has(res.status) && attempt < MAX_HTTP_ATTEMPTS - 1) {
       await pause(res.status === 429 ? 2400 : 1000 * (attempt + 1), signal);
@@ -324,7 +342,7 @@ function parseArgs(raw) {
  * Bir növbəni idarə edir: model → alətlər → model ... → yekun mətn.
  * @returns {{text: string, toolsUsed: Array, actions: Array, rawMessages: Array}}
  */
-export async function runTurn({ settings, messages, toolDefs, executeTool, onTool, signal }) {
+export async function runTurn({ settings, messages, toolDefs, executeTool, onTool, onWait, signal }) {
   const convo = [...messages];
   const toolsUsed = [];
   const actions = [];
@@ -332,7 +350,7 @@ export async function runTurn({ settings, messages, toolDefs, executeTool, onToo
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     let result;
     try {
-      result = await chatRequest({ settings, messages: convo, tools: toolDefs, signal });
+      result = await chatRequest({ settings, messages: convo, tools: toolDefs, signal, onWait });
     } catch (err) {
       // Pulsuz rejimdə limit alətdən sonra bitə bilər — əlimizdəki nəticəni istifadəçiyə veririk.
       if (toolsUsed.length && (err.status === 402 || err.status === 429)) {
@@ -384,7 +402,8 @@ export async function runTurn({ settings, messages, toolDefs, executeTool, onToo
       { role: 'user', content: 'Alətlərin nəticələrinə əsasən istifadəçiyə qısa yekun cavab ver.' }
     ],
     tools: [],
-    signal
+    signal,
+    onWait
   });
 
   return {

@@ -74,6 +74,7 @@ R8-in real faydası: dex 11% kiçildi, köməkçi siniflər obfuscate olundu (`M
 
 ### Versiya tarixçəsi
 
+- **1.7** (versionCode 8) — pulsuz rejim limiti (402/429) xəta kimi göstərilmir: JARVIS sayğacla gözləyir və cavabı avtomatik tamamlayır.
 - **1.6** (versionCode 7) — service worker şəbəkə-öncəlli işləyir və brauzerin HTTP keşini keçir, ona görə yeniləmələr dərhal görünür.
 - **1.5** (versionCode 6) — pulsuz rejimdə alət nəticələri təbii cümlə ilə verilir (texniki JSON əvəzinə).
 - **1.4** (versionCode 5) — yeni quraşdırmada standart olaraq açarsız pulsuz rejim seçilir; onboarding-də “açarsız başla” düyməsi birbaşa pulsuz rejimi aktivləşdirir.
