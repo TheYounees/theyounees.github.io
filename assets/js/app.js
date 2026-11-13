@@ -6,6 +6,7 @@ import { voice } from './voice.js';
 import { PROVIDERS, providerConfig } from './config.js';
 import { TOOL_DEFS, executeTool } from './tools.js';
 import { buildSystemPrompt, runTurn, fetchModels, pickModel } from './llm.js';
+import { drive } from './drive.js';
 
 let busy = false;
 let pendingImage = null;
@@ -60,6 +61,7 @@ function init() {
   };
 
   voice.initVoices();
+  drive.setClientId(store.state.settings.driveClientId || '');
   ui.fillProfileFields(store.state.profile);
   ui.renderMemory(store.state);
   ui.setMuteState(!store.state.settings.speak);
@@ -83,7 +85,55 @@ function init() {
   }
 
   store.subscribe((type) => {
-    if (type === 'change') ui.renderMemory(store.state);
+    if (type === 'change') {
+      ui.renderMemory(store.state);
+      if (drive.isConnected()) drive.scheduleSync(store.state);
+    }
+  });
+
+  // Google Drive callback (OAuth redirect) yoxlanır.
+  (async () => {
+    try {
+      const ok = await drive.handleCallback();
+      if (ok) {
+        ui.toast('Google Drive bağlandı. Yaddaş sinxronizasiya olunur…');
+        const merged = await drive.pullAndMerge(store.state);
+        if (merged && merged !== store.state) {
+          store.replaceState(merged);
+          ui.fillProfileFields(store.state.profile);
+          restoreTranscript();
+          ui.renderMemory(store.state);
+        }
+        refreshDriveStatus();
+      }
+    } catch (err) {
+      ui.toast(err.message || 'Google Drive xətası.', 'err');
+    }
+  })();
+
+  // İlk yükləmədə Drive-dan çək (əgər qoşulubsa).
+  if (drive.isConnected()) {
+    (async () => {
+      try {
+        const merged = await drive.pullAndMerge(store.state);
+        if (merged && merged !== store.state) {
+          store.replaceState(merged);
+          ui.fillProfileFields(store.state.profile);
+          restoreTranscript();
+          ui.renderMemory(store.state);
+        }
+        refreshDriveStatus();
+      } catch (err) {
+        ui.toast(err.message || 'Drive sinxronizasiyası alınmadı.', 'err');
+      }
+    })();
+  }
+
+  drive.onEvent((type, detail) => {
+    if (type === 'connected' || type === 'disconnected' || type === 'synced' || type === 'pulled' || type === 'error') {
+      refreshDriveStatus();
+      if (type === 'error') ui.toast('Drive: ' + (detail || 'xəta'), 'err');
+    }
   });
 
   registerServiceWorker();
@@ -91,6 +141,18 @@ function init() {
   showShellInfo();
   exposeApkDownload();
   refreshKeyChip();
+}
+
+function refreshDriveStatus() {
+  const el = document.querySelector('#st-drive-status');
+  if (!el) return;
+  if (drive.isConnected()) {
+    el.textContent = 'Google Drive qoşulub — yaddaş sinxronizasiya olunur.';
+  } else if (drive.getClientId()) {
+    el.textContent = 'Google Drive qoşulmayıb. "Google Drive bağla" düyməsi ilə bağlayın.';
+  } else {
+    el.textContent = 'Google Drive qoşulmayıb.';
+  }
 }
 
 /** Açar yoxdursa yuxarıda görünən "açarı qoş" düyməsi. */
@@ -485,6 +547,7 @@ function updateProviderHints(providerSel, keySel, hintSel) {
 function openSettings() {
   ui.openSettings(store.state.settings);
   updateProviderHints('#st-provider', '#st-key', '#st-hint');
+  refreshDriveStatus();
 }
 
 function saveSettings() {
@@ -497,6 +560,7 @@ function saveSettings() {
     model: $('#st-model').value.trim(),
     baseUrl: $('#st-base').value.trim(),
     searchKey: $('#st-search').value.trim(),
+    driveClientId: $('#st-drive-client').value.trim(),
     speak: $('#st-speak').checked,
     wakeWord: $('#st-wake').checked,
     rate: Number($('#st-rate').value),
@@ -506,9 +570,11 @@ function saveSettings() {
 
   ui.setMuteState(!store.state.settings.speak);
   ui.setWakeState(Boolean(store.state.settings.wakeWord));
+  drive.setClientId(store.state.settings.driveClientId);
   ui.closeSettings();
   ui.setStatus(modeLabel());
   refreshKeyChip();
+  refreshDriveStatus();
   ui.toast(key ? 'Tənzimləmələr yadda saxlanıldı.' : 'Açar boşdur — beyin işləməyəcək.');
 
   if (!store.state.settings.wakeWord) voice.stopWakeWord();
@@ -605,6 +671,19 @@ function bindEvents() {
   $('#settings-close').addEventListener('click', () => ui.closeSettings());
   $('#settings-cancel').addEventListener('click', () => ui.closeSettings());
   $('#settings-save').addEventListener('click', saveSettings);
+
+  $('#st-drive-connect').addEventListener('click', async () => {
+    const cid = $('#st-drive-client').value.trim();
+    if (!cid) { ui.toast('Əvvəlcə Client ID daxil edin.', 'err'); return; }
+    drive.setClientId(cid);
+    store.setSettings({ driveClientId: cid });
+    try { await drive.connect(); } catch (err) { ui.toast(err.message || 'Bağlantı alınmadı.', 'err'); }
+  });
+  $('#st-drive-disconnect').addEventListener('click', () => {
+    drive.disconnect();
+    ui.toast('Google Drive bağlantısı kəsildi.');
+    refreshDriveStatus();
+  });
   $('#st-provider').addEventListener('change', () => updateProviderHints('#st-provider', '#st-key', '#st-hint'));
 
   $('#st-model-fetch').addEventListener('click', async () => {

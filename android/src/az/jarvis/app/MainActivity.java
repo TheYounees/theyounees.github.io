@@ -3,6 +3,7 @@ package az.jarvis.app;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
@@ -55,6 +56,7 @@ public class MainActivity extends Activity {
 
     private SpeechRecognizer recognizer;
     private boolean wakeRunning = false;
+    private boolean wakeEnabled = false;
     private String sttLang = "az-AZ";
     private boolean sttFallbackTried = false;
 
@@ -269,7 +271,9 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void startWakeWord() {
             runOnUiThread(() -> {
+                wakeEnabled = true;
                 wakeRunning = true;
+                JarvisWakeService.setWakeEnabled(MainActivity.this, false);
                 startRecognition(true);
             });
         }
@@ -277,8 +281,10 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void stopWakeWord() {
             runOnUiThread(() -> {
+                wakeEnabled = false;
                 wakeRunning = false;
                 destroyRecognizer();
+                JarvisWakeService.setWakeEnabled(MainActivity.this, false);
             });
         }
 
@@ -512,6 +518,27 @@ public class MainActivity extends Activity {
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts.setLanguage(Locale.getDefault());
             }
+            // Daha canli, təbii səs seçimi (premium/natural varsa).
+            try {
+                java.util.Set<android.speech.tts.Voice> voices = tts.getVoices();
+                if (voices != null && !voices.isEmpty()) {
+                    android.speech.tts.Voice best = null;
+                    int bestScore = -1000;
+                    for (android.speech.tts.Voice v : voices) {
+                        if (v == null) continue;
+                        String name = String.valueOf(v.getName()).toLowerCase();
+                        Locale loc = v.getLocale();
+                        boolean azOrTr = loc != null && (loc.getLanguage().equals("az") || loc.getLanguage().equals("tr"));
+                        int score = 0;
+                        if (azOrTr) score += 10;
+                        if (name.contains("natural") || name.contains("premium") || name.contains("neural") || name.contains("wavenet")) score += 8;
+                        if (name.contains("google") || name.contains("microsoft")) score += 4;
+                        if (name.contains("compact") || name.contains("basic")) score -= 3;
+                        if (score > bestScore) { bestScore = score; best = v; }
+                    }
+                    if (best != null) tts.setVoice(best);
+                }
+            } catch (Exception ignored) { /* voice seçimi dəstəklənmir */ }
             tts.setSpeechRate(pendingRate);
             tts.setPitch(pendingPitch);
             tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
@@ -618,9 +645,31 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Arxa planda isəyən service-i dayandırırıq və lokal oyanma sözünü bərpa edirik.
+        JarvisWakeService.setWakeEnabled(this, false);
+        try {
+            SharedPreferences sp = getSharedPreferences("jarvis", MODE_PRIVATE);
+            if (sp.getBoolean("wakeTriggered", false)) {
+                sp.edit().putBoolean("wakeTriggered", false).apply();
+                emit("wake", "");
+            }
+        } catch (Exception ignored) {}
+        if (wakeEnabled && !wakeRunning) {
+            wakeRunning = true;
+            startRecognition(true);
+        }
+    }
+
+    @Override
     protected void onPause() {
         super.onPause();
         if (tts != null) tts.stop();
+        // Oyanma sözü aktivdirsə, arxa planda service ilə davam etsin.
+        if (wakeEnabled) {
+            JarvisWakeService.setWakeEnabled(this, true);
+        }
         wakeRunning = false;
         destroyRecognizer();
     }

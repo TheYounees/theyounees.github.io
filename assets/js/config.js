@@ -79,12 +79,14 @@ export const DEFAULT_SETTINGS = {
   temperature: 0.75,
   speak: true,
   voiceUri: '',
-  rate: 1,
-  pitch: 0.92,
+  rate: 1.05,
+  pitch: 1.0,
   wakeWord: false,
   searchKey: '',
   city: 'Bakı',
-  historyLimit: 24
+  historyLimit: 24,
+  driveClientId: '',
+  driveSync: false
 };
 
 export const QUICK_ACTIONS = [

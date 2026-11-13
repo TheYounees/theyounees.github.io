@@ -31,18 +31,30 @@ function cleanForSpeech(text) {
     .trim();
 }
 
+function voiceScore(v) {
+  let score = 0;
+  const name = String(v.name || '').toLowerCase();
+  if (/natural|premium|neural|wavenet|studio/i.test(name)) score += 8;
+  if (/google|microsoft|apple/i.test(name)) score += 4;
+  if (/^az/i.test(v.lang)) score += 6;
+  else if (/^tr/i.test(v.lang)) score += 5;
+  else if (/^ru|^en/i.test(v.lang)) score += 2;
+  if (/compact|basic/i.test(name)) score -= 3;
+  return score;
+}
+
 function pickVoice(voices, preferredUri) {
   if (!voices.length) return null;
   if (preferredUri) {
     const exact = voices.find((v) => v.voiceURI === preferredUri);
     if (exact) return exact;
   }
-  const az = voices.find((v) => /^az/i.test(v.lang));
-  if (az) return az;
-  const tr = voices.find((v) => /^tr/i.test(v.lang));
-  if (tr) return tr;
-  const generic = voices.find((v) => /^ru|^en/i.test(v.lang) && /google|microsoft|natural|premium/i.test(v.name));
-  return generic || voices[0];
+  const az = voices.filter((v) => /^az/i.test(v.lang));
+  if (az.length) return az.sort((a, b) => voiceScore(b) - voiceScore(a))[0];
+  const tr = voices.filter((v) => /^tr/i.test(v.lang));
+  if (tr.length) return tr.sort((a, b) => voiceScore(b) - voiceScore(a))[0];
+  const others = voices.slice().sort((a, b) => voiceScore(b) - voiceScore(a));
+  return others[0] || voices[0];
 }
 
 class Voice {

@@ -14,6 +14,7 @@ function defaultState() {
   return {
     version: 2,
     createdAt: Date.now(),
+    updatedAt: Date.now(),
     onboarded: false,
     profile: { name: '', city: 'Bakı', interests: [], about: '' },
     settings: { ...DEFAULT_SETTINGS },
@@ -51,6 +52,7 @@ class Store {
     return {
       ...base,
       ...saved,
+      updatedAt: Number(saved.updatedAt || saved.createdAt || base.updatedAt),
       profile: { ...base.profile, ...(saved.profile || {}) },
       settings: { ...base.settings, ...(saved.settings || {}) },
       facts: Array.isArray(saved.facts) ? saved.facts : [],
@@ -60,6 +62,7 @@ class Store {
   }
 
   save() {
+    this.state.updatedAt = Date.now();
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
     } catch (err) {
@@ -67,6 +70,15 @@ class Store {
       this.emit('storage-error', err);
     }
     this.emit('change');
+  }
+
+  /* Google Drive-dan gələn vəziyyəti əvəz edir (sinxronizasiya üçün). */
+  replaceState(saved) {
+    if (!saved || typeof saved !== 'object') return false;
+    this.state = this.normalize(saved);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state)); } catch { /* yoxdur */ }
+    this.emit('change');
+    return true;
   }
 
   subscribe(fn) {

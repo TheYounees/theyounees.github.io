@@ -180,6 +180,15 @@
       <div class="field"><label for="st-search">Tavily API açarı (istəyə bağlı)</label><input id="st-search" type="password" autocomplete="off" spellcheck="false" placeholder="tvly-…" /></div>
       <p class="hint">Açar olmadan JARVIS Vikipediya vasitəsilə axtarış edir.</p>
 
+      <h3>Google Drive sinxronizasiyası (istəyə bağlı)</h3>
+      <div class="field"><label for="st-drive-client">Google OAuth Client ID</label><input id="st-drive-client" type="text" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com" /></div>
+      <p class="hint">Google Cloud Console → Credentials → OAuth 2.0 Client ID (Web application). Authorized JavaScript origins-ə sayt ünvanını əlavə edin. Client ID public-dir, client secret lazım deyil.</p>
+      <div class="btn-row">
+        <button class="btn small" id="st-drive-connect" type="button">Google Drive bağla</button>
+        <button class="btn small danger" id="st-drive-disconnect" type="button">Bağlantını kəs</button>
+      </div>
+      <p class="hint" id="st-drive-status">Google Drive qoşulmayıb.</p>
+
       <div class="btn-row end">
         <button class="btn" id="settings-cancel">Ləğv et</button>
         <button class="btn primary" id="settings-save">Yadda saxla</button>
