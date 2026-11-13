@@ -156,7 +156,14 @@
       <h3>Beyin</h3>
       <div class="field"><label for="st-provider">Provayder</label><select id="st-provider"></select></div>
       <div class="field"><label for="st-key">API açarı</label><input id="st-key" type="password" autocomplete="off" spellcheck="false" placeholder="AIza… / sk-…" /></div>
-      <div class="field"><label for="st-model">Model</label><input id="st-model" type="text" spellcheck="false" placeholder="gemini-2.5-flash" /></div>
+      <div class="field">
+        <label for="st-model">Model</label>
+        <div class="model-row">
+          <input id="st-model" type="text" list="model-options" spellcheck="false" placeholder="gemini-3.8-flash" />
+          <button class="btn small" id="st-model-fetch" type="button" title="Provayderdən model siyahısını çək">Gətir</button>
+        </div>
+        <datalist id="model-options"></datalist>
+      </div>
       <div class="field"><label for="st-base">Baza URL (istəyə bağlı)</label><input id="st-base" type="text" spellcheck="false" placeholder="https://…/v1" /></div>
       <p class="hint" id="st-hint">Açar yalnız bu brauzerdə saxlanılır və birbaşa provayderə göndərilir. Ollama üçün açar lazım deyil.</p>
 

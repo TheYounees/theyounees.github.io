@@ -5,7 +5,7 @@ import { ui, $ } from './ui.js';
 import { voice } from './voice.js';
 import { PROVIDERS, providerConfig } from './config.js';
 import { TOOL_DEFS, executeTool } from './tools.js';
-import { buildSystemPrompt, runTurn, localFallback } from './llm.js';
+import { buildSystemPrompt, runTurn, localFallback, fetchModels, pickModel } from './llm.js';
 
 let busy = false;
 let pendingImage = null;
@@ -160,11 +160,19 @@ async function send(text) {
       toolDefs: TOOL_DEFS,
       executeTool,
       signal: abortCtrl.signal,
-      onTool: (name, args, output) => {
-        const detail = args?.city || args?.query || args?.action || args?.text || '';
-        const line = `${TOOL_LABELS[name] || name}${detail ? ' · ' + String(detail).slice(0, 60) : ''}${output?.ok === false ? ' · alınmadı' : ''}`;
-        ui.addMessage({ role: 'tool', content: line });
-      }
+      onTool: logTool
+    }).catch(async (err) => {
+      // Model adı köhnəlibsə (404) — provayderdən siyahını çəkib avtomatik yenidən cəhd edirik.
+      const recovered = await recoverModel(settings, err);
+      if (!recovered) throw err;
+      return runTurn({
+        settings: store.state.settings,
+        messages,
+        toolDefs: TOOL_DEFS,
+        executeTool,
+        signal: abortCtrl.signal,
+        onTool: logTool
+      });
     });
 
     deliver(result.text || 'Cavab formalaşmadı.', result.actions || []);
@@ -189,6 +197,33 @@ async function send(text) {
 
 /* pendingImageData — şəkil birbaşa yaddaşa yazılmır, yalnız bu sorğu üçün istifadə olunur. */
 let pendingImageData = null;
+
+function logTool(name, args, output) {
+  const detail = args?.city || args?.query || args?.action || args?.text || '';
+  const line = `${TOOL_LABELS[name] || name}${detail ? ' · ' + String(detail).slice(0, 60) : ''}${output?.ok === false ? ' · alınmadı' : ''}`;
+  ui.addMessage({ role: 'tool', content: line });
+}
+
+/** 404 zamanı model siyahısını çəkib ən uyğun modeli təyin edir. */
+async function recoverModel(settings, err) {
+  const message = String(err?.message || '');
+  if (!/404|tapılmadı|not found/i.test(message)) return false;
+
+  try {
+    const ids = await fetchModels(store.state.settings);
+    const pick = pickModel(ids, store.state.settings.provider);
+    if (!pick || pick === store.state.settings.model) return false;
+
+    store.setSettings({ model: pick });
+    const input = $('#st-model');
+    if (input) input.value = pick;
+    ui.addMessage({ role: 'tool', content: `model avtomatik seçildi · ${pick}` });
+    ui.toast(`Model dəyişdirildi: ${pick}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function deliver(text, actions) {
   ui.hideTyping();
@@ -448,6 +483,36 @@ function bindEvents() {
   $('#settings-cancel').addEventListener('click', () => ui.closeSettings());
   $('#settings-save').addEventListener('click', saveSettings);
   $('#st-provider').addEventListener('change', () => updateProviderHints('#st-provider', '#st-key', '#st-hint'));
+
+  $('#st-model-fetch').addEventListener('click', async () => {
+    const btn = $('#st-model-fetch');
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+      const ids = await fetchModels({
+        ...store.state.settings,
+        provider: $('#st-provider').value,
+        apiKey: $('#st-key').value.trim(),
+        baseUrl: $('#st-base').value.trim()
+      });
+      const list = $('#model-options');
+      list.innerHTML = ids.slice(0, 300).map((id) => `<option value="${id}"></option>`).join('');
+      if (!ids.length) {
+        ui.toast('Model siyahısı boşdur.', 'err');
+      } else {
+        if (!$('#st-model').value.trim()) {
+          $('#st-model').value = pickModel(ids, $('#st-provider').value);
+        }
+        ui.toast(`${ids.length} model tapıldı — siyahıdan seçin.`);
+      }
+    } catch (err) {
+      ui.toast(err.message || 'Modellər alınmadı.', 'err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  });
   $('#st-rate').addEventListener('input', (e) => { $('#rate-val').textContent = Number(e.target.value).toFixed(2); });
   $('#st-pitch').addEventListener('input', (e) => { $('#pitch-val').textContent = Number(e.target.value).toFixed(2); });
 

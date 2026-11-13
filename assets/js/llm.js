@@ -82,9 +82,69 @@ function errorMessage(status, body) {
   const detail = body?.error?.message || body?.message || '';
   if (status === 401 || status === 403) return 'API açarı qəbul edilmədi (401/403). Tənzimləmələrdən açarı yoxlayın.';
   if (status === 429) return 'Limit aşıldı (429). Bir az sonra yenidən cəhd edin və ya başqa model seçin.';
-  if (status === 404) return `Model və ya endpoint tapılmadı (404).${detail ? ' ' + detail : ''}`;
+  if (status === 404) {
+    return `Model və ya endpoint tapılmadı (404). Provayder modeli dəyişmiş ola bilər — Tənzimləmələrdə “Gətir” düyməsi ilə model siyahısını yeniləyin.${detail ? ' ' + detail : ''}`;
+  }
   if (status >= 500) return 'Provayder tərəfində xəta baş verdi. Bir az sonra yenidən cəhd edin.';
   return `Sorğu alınmadı (${status}).${detail ? ' ' + detail : ''}`;
+}
+
+/** Provayderdən mövcud model siyahısını götürür. */
+export async function fetchModels(settings) {
+  if (!settings.apiKey && settings.provider !== 'ollama') {
+    throw new Error('Əvvəlcə API açarını daxil edin.');
+  }
+
+  if (settings.provider === 'gemini') {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(settings.apiKey)}`
+    );
+    if (!res.ok) throw new Error(errorMessage(res.status, null));
+    const data = await res.json();
+    return (data.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m) => String(m.name || '').replace(/^models\//, ''))
+      .filter((id) => id && !/embedding|aqa|imagen|veo|tts|image|live|native-audio|learnlm/i.test(id));
+  }
+
+  const cfg = providerConfig(settings);
+  if (!cfg.baseUrl) throw new Error('Baza URL təyin olunmayıb.');
+  const headers = {};
+  if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
+  let res;
+  try {
+    res = await fetch(`${cfg.baseUrl}/models`, { headers });
+  } catch {
+    throw new Error('Model siyahısına qoşulmaq alınmadı.');
+  }
+  if (!res.ok) throw new Error(errorMessage(res.status, null));
+  const data = await res.json();
+  const raw = data.data || data.models || [];
+  return raw
+    .map((m) => m.id || m.name)
+    .filter(Boolean)
+    .filter((id) => !/embed|whisper|tts|dall-e|moderation|image|rerank/i.test(String(id)));
+}
+
+/** Siyahıdan ən uyğun modeli seçir (yeni versiya, flash/mini üstünlük). */
+export function pickModel(ids, provider) {
+  if (!Array.isArray(ids) || !ids.length) return '';
+  const scored = ids.map((id) => {
+    const name = String(id);
+    let score = 0;
+    const version = Number.parseFloat((name.match(/(\d+(?:\.\d+)?)/) || [])[1] || '0');
+    if (Number.isFinite(version)) score += version * 10;
+    if (/flash/i.test(name)) score += 4;
+    if (/mini|chat|instruct/i.test(name)) score += 2;
+    if (/latest/i.test(name)) score += 3;
+    if (/pro/i.test(name) && provider === 'gemini') score += 1;
+    if (/lite/i.test(name)) score -= 1;
+    if (/preview|exp|alpha|beta|test|thinking/i.test(name)) score -= 6;
+    if (/embedding|vision|audio|tts|image/i.test(name)) score -= 20;
+    return { id: name, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0].id;
 }
 
 export async function chatRequest({ settings, messages, tools, signal }) {

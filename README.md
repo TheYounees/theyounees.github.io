@@ -74,6 +74,7 @@ R8-in real faydası: dex 11% kiçildi, köməkçi siniflər obfuscate olundu (`M
 
 ### Versiya tarixçəsi
 
+- **1.2** (versionCode 3) — model 404 düzəlişi: standart model `gemini-3.8-flash`, tənzimləmələrdə provayderdən model siyahısı (“Gətir”) və 404 zamanı avtomatik model seçimi; əlavə şəkil önizləməsinin boş görünməsi düzəldildi. Google 2.5 modellərini yeni açarlar üçün bağladığı üçün köhnə `gemini-2.5-flash` 404 verirdi.
 - **1.1** (versionCode 2) — öz release imzası, JS/CSS minifikasiyası, ölçü optimallaşdırması (66 KB → 62 KB).
 - **1.0** (versionCode 1) — ilk debug imzalı APK.
 

@@ -4,8 +4,8 @@ export const PROVIDERS = {
   gemini: {
     label: 'Google Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: 'gemini-2.5-flash',
-    keyHint: 'aistudio.google.com/apikey ünvanından pulsuz açar götürün',
+    model: 'gemini-3.8-flash',
+    keyHint: 'aistudio.google.com/apikey ünvanından pulsuz açar götürün. Model adı dəyişibsə “Gətir” düyməsi ilə yeniləyin.',
     needsKey: true,
     vision: true
   },
@@ -13,6 +13,7 @@ export const PROVIDERS = {
     label: 'OpenAI',
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-4o-mini',
+    modelHint: 'Model adı dəyişibsə “Gətir” düyməsi ilə siyahını çəkin.',
     keyHint: 'platform.openai.com/api-keys ünvanından açar götürün',
     needsKey: true,
     vision: true
@@ -20,7 +21,7 @@ export const PROVIDERS = {
   openrouter: {
     label: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'google/gemini-2.5-flash',
+    model: 'google/gemini-3.8-flash',
     keyHint: 'openrouter.ai/keys ünvanından açar götürün (bir çox model bir yerdə)',
     needsKey: true,
     vision: true

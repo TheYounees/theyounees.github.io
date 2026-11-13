@@ -21,6 +21,9 @@
 
 * { box-sizing: border-box; }
 
+/* `hidden` atributu CSS display qaydaları ilə üstələnməsin. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -604,6 +607,9 @@ body::before {
 .field.two input[type="range"] { padding: 0; accent-color: var(--cyan); background: transparent; border: 0; }
 .field.inline { display: flex; gap: 7px; margin: 10px 0 0; }
 .field.inline input { flex: 1; }
+.model-row { display: flex; gap: 7px; align-items: center; }
+.model-row input { flex: 1; }
+.model-row .btn { flex: none; height: 36px; padding: 0 12px; }
 
 .hint { font-size: 11px; color: #617b88; line-height: 1.55; margin: 6px 0; }
 .hint.center { text-align: center; }
