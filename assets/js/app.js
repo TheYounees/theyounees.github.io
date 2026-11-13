@@ -625,6 +625,8 @@ function bindEvents() {
   });
 
   $('#ob-skip').addEventListener('click', () => {
+    // Açarsız pulsuz rejim — heç bir qurulum olmadan dərhal işləyir.
+    store.setSettings({ provider: 'pollinations', apiKey: '', model: PROVIDERS.pollinations.model, baseUrl: '' });
     store.state.onboarded = true;
     store.save();
     $('#onboarding').hidden = true;
