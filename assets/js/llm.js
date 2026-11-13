@@ -282,9 +282,20 @@ function formatToolOutput(name, out) {
   return JSON.stringify(out).slice(0, 200);
 }
 
+const TOOL_SENTENCES = {
+  update_profile: () => 'Sizi tanıdım, bunu yadda saxladım.',
+  remember: (out, args) => `Yadda saxladım${args?.text ? ': ' + String(args.text).slice(0, 120) : '.'}`,
+  add_note: () => 'Qeydi əlavə etdim.',
+  set_timer: (out) => out?.message || 'Taymeri qurdum.'
+};
+
 function toolSummaryText(toolsUsed) {
-  const lines = toolsUsed.slice(-3).map((t) => `• ${t.name === 'get_weather' ? 'Hava' : TOOL_TITLES[t.name] || t.name}: ${formatToolOutput(t.name, t.result)}`);
-  return `${lines.join('\n')}\n\nAçarsız rejimdə cavab limiti olduğu üçün ətraflı şərh verə bilmirəm — 45 saniyə sonra davam edə bilərik.`;
+  const lines = toolsUsed.slice(-3).map((t) => {
+    const sentence = TOOL_SENTENCES[t.name];
+    if (sentence) return sentence(t.result, t.args);
+    return `${t.name === 'get_weather' ? 'Hava' : TOOL_TITLES[t.name] || t.name}: ${formatToolOutput(t.name, t.result)}`;
+  });
+  return `${lines.join('\n')}\n\n(Açarsız rejimdə cavablar arasında təxminən 45 saniyə fasilə lazımdır.)`;
 }
 
 const TOOL_TITLES = {
