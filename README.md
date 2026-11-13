@@ -74,6 +74,7 @@ R8-in real faydası: dex 11% kiçildi, köməkçi siniflər obfuscate olundu (`M
 
 ### Versiya tarixçəsi
 
+- **1.6** (versionCode 7) — service worker şəbəkə-öncəlli işləyir və brauzerin HTTP keşini keçir, ona görə yeniləmələr dərhal görünür.
 - **1.5** (versionCode 6) — pulsuz rejimdə alət nəticələri təbii cümlə ilə verilir (texniki JSON əvəzinə).
 - **1.4** (versionCode 5) — yeni quraşdırmada standart olaraq açarsız pulsuz rejim seçilir; onboarding-də “açarsız başla” düyməsi birbaşa pulsuz rejimi aktivləşdirir.
 - **1.3** (versionCode 4) — etibarlılıq: 429/5xx cavablarında avtomatik yenidən cəhd, provayder cavab vermədikdə açarsız “Pulsuz” beyinə keçid (ehtiyat rejim), pulsuz rejimdə alət nəticələrinin oxunaqlı təqdimatı, model siyahısının açarsız provayderdə də çəkilməsi.

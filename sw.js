@@ -1,6 +1,6 @@
 /* JARVIS service worker — yalnız tətbiq qabığını keşləyir.
    API sorğuları heç vaxt keşlənmir, şəxsi məlumat diskə yazılmır. */
-const CACHE = 'jarvis-shell-v3';
+const CACHE = 'jarvis-shell-v4';
 const SHELL = [
   './',
   './index.html',
@@ -38,8 +38,9 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Şəbəkə-öncəlli: yeniləmələr dərhal görünür, internet yoxdursa keş işləyir.
+  // `cache: 'no-cache'` brauzerin 10 dəqiqəlik HTTP keşini keçib serverlə yoxlayır (ETag → 304).
   event.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok && res.type === 'basic') {
           const copy = res.clone();
