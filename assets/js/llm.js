@@ -159,7 +159,7 @@ export function pickModel(ids, provider) {
 }
 
 const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
-const MAX_HTTP_ATTEMPTS = 3;
+const MAX_HTTP_ATTEMPTS = 5;
 
 function pause(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -215,7 +215,7 @@ async function fetchWithTimeout(url, init, signal, timeoutMs) {
   }
 }
 
-export async function chatRequest({ settings, messages, tools, signal, onWait }) {
+export async function chatRequest({ settings, messages, tools, signal, onWait, onModelChange }) {
   const { cfg, url } = endpoint(settings);
   const timeoutMs = Number(settings.requestTimeout) > 0 ? Number(settings.requestTimeout) : 15000;
   // Gemini adətən 1–3 saniyədə cavab verir; 15 saniyə kifayətdir və uzun donmaların qarşısını alır.
@@ -238,8 +238,14 @@ export async function chatRequest({ settings, messages, tools, signal, onWait })
 
   let lastError = null;
 
+  // Hər modelin kvotası ayrıdır: limit dolanda avtomatik yüngül modelə keçirik.
+  const models = [...new Set([cfg.model, ...(cfg.fallbacks || [])].filter(Boolean))];
+  let modelIndex = 0;
+
   // Pulsuz tier-lərdə 429/5xx (model overloaded) tez-tez olur — qısa fasilə ilə yenidən cəhd edirik.
   for (let attempt = 0; attempt < MAX_HTTP_ATTEMPTS; attempt++) {
+    payload.model = models[modelIndex];
+
     let res = null;
     let timedOut = false;
     try {
@@ -302,11 +308,19 @@ export async function chatRequest({ settings, messages, tools, signal, onWait })
     lastError = new Error(errorMessage(res.status, body));
     lastError.status = res.status;
 
-    // Limit (402/429): xəta göstərmək əvəzinə gözləyib davam edirik.
-    const waitMs = retryWaitMs(res.status, body);
+    // 402 (ödənişli limit): xəta göstərmək əvəzinə qısa gözləyib davam edirik.
+    const waitMs = res.status === 402 ? retryWaitMs(res.status, body) : 0;
     if (waitMs && attempt < MAX_HTTP_ATTEMPTS - 1) {
       onWait?.(waitMs);
       await pause(waitMs, signal);
+      continue;
+    }
+
+    // Model limiti / model tapılmadı → növbəti modeli sınayırıq (kvotalar ayrıdır).
+    if ((res.status === 429 || res.status === 404) && modelIndex < models.length - 1) {
+      modelIndex += 1;
+      onModelChange?.(models[modelIndex]);
+      await pause(400, signal);
       continue;
     }
 
@@ -389,7 +403,7 @@ function parseArgs(raw) {
  * Bir növbəni idarə edir: model → alətlər → model ... → yekun mətn.
  * @returns {{text: string, toolsUsed: Array, actions: Array, rawMessages: Array}}
  */
-export async function runTurn({ settings, messages, toolDefs, executeTool, onTool, onWait, signal }) {
+export async function runTurn({ settings, messages, toolDefs, executeTool, onTool, onWait, onModelChange, signal }) {
   const convo = [...messages];
   const toolsUsed = [];
   const actions = [];
@@ -398,7 +412,7 @@ export async function runTurn({ settings, messages, toolDefs, executeTool, onToo
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     let result;
     try {
-      result = await chatRequest({ settings, messages: convo, tools: toolDefs, signal, onWait });
+      result = await chatRequest({ settings, messages: convo, tools: toolDefs, signal, onWait, onModelChange });
     } catch (err) {
       // Pulsuz rejimdə limit alətdən sonra bitə bilər — əlimizdəki nəticəni istifadəçiyə veririk.
       if (toolsUsed.length && (err.status === 402 || err.status === 429)) {
@@ -457,7 +471,8 @@ export async function runTurn({ settings, messages, toolDefs, executeTool, onToo
     ],
     tools: [],
     signal,
-    onWait
+    onWait,
+    onModelChange
   });
 
   return {

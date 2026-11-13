@@ -5,9 +5,28 @@ export const PROVIDERS = {
     label: 'Google Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     model: 'gemini-3.8-flash',
-    keyHint: 'aistudio.google.com/apikey ünvanından pulsuz açar götürün. Model adı dəyişibsə “Gətir” düyməsi ilə yeniləyin.',
+    keyHint: 'aistudio.google.com/apikey — pulsuz açar. Limit dolarsa JARVIS avtomatik yüngül modelə keçir.',
     needsKey: true,
-    vision: true
+    vision: true,
+    fallbacks: ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.1-flash-lite']
+  },
+  groq: {
+    label: 'Groq (çox sürətli)',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    model: 'llama-3.3-70b-versatile',
+    keyHint: 'console.groq.com/keys — pulsuz açar, cavab demək olar dərhal gəlir. Gemini limiti dolanda ideal alternativdir.',
+    needsKey: true,
+    vision: false,
+    fallbacks: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b']
+  },
+  openrouter: {
+    label: 'OpenRouter (çox model)',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    model: 'google/gemini-3.8-flash',
+    keyHint: 'openrouter.ai/keys — bir açarla onlarla model, pulsuz variantlar da var',
+    needsKey: true,
+    vision: true,
+    fallbacks: ['google/gemini-3.8-flash', 'meta-llama/llama-3.3-70b-instruct:free', 'mistralai/mistral-small-3.2-24b-instruct:free']
   },
   openai: {
     label: 'OpenAI',

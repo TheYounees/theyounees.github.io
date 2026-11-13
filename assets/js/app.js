@@ -299,7 +299,15 @@ function logTool(name, args, output) {
  */
 async function runWithFailover(settings, messages) {
   const attempt = (s) =>
-    runTurn({ settings: s, messages, toolDefs: TOOL_DEFS, executeTool, signal: abortCtrl?.signal, onTool: logTool });
+    runTurn({
+      settings: s,
+      messages,
+      toolDefs: TOOL_DEFS,
+      executeTool,
+      signal: abortCtrl?.signal,
+      onTool: logTool,
+      onModelChange: (model) => ui.addMessage({ role: 'tool', content: `model dəyişdirildi · ${model}` })
+    });
 
   try {
     return await attempt(settings);
@@ -481,8 +489,7 @@ function openSettings() {
 
 function saveSettings() {
   const key = $('#st-key').value.trim();
-  // Açar varsa beyin həmişə Gemini-dir — provayder səhv qalmasın.
-  const provider = key ? 'gemini' : $('#st-provider').value;
+  const provider = $('#st-provider').value || 'gemini';
 
   store.setSettings({
     provider,

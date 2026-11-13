@@ -345,9 +345,7 @@ class UI {
 
   /* ---- provayder seçimləri ---- */
   populateProviders() {
-    // Yalnız Gemini göstərilir — digər provayderlər ehtiyat (fallback) olaraq kodda qalır.
     const options = Object.entries(PROVIDERS)
-      .filter(([id]) => id === 'gemini')
       .map(([id, p]) => `<option value="${id}">${p.label}</option>`)
       .join('');
     for (const id of ['#st-provider', '#ob-provider']) {
