@@ -141,6 +141,14 @@ async function send(text) {
   }, 1000);
 
   try {
+    // Cihaz əmrləri modelə getmədən dərhal yerinə yetirilir.
+    const localReply = await tryLocalCommand(content);
+    if (localReply) {
+      await wait(120);
+      deliver(localReply, []);
+      return;
+    }
+
     if (needsKey() && !settings.apiKey) {
       await wait(450);
       const reply = localFallback(content, { settings, profile: store.state.profile });
@@ -203,6 +211,32 @@ async function send(text) {
 
 /* pendingImageData — şəkil birbaşa yaddaşa yazılmır, yalnız bu sorğu üçün istifadə olunur. */
 let pendingImageData = null;
+
+/** Fənər, saat, tarix kimi əmrləri modelə göndərmədən dərhal icra edir. */
+async function tryLocalCommand(text) {
+  const t = String(text).toLowerCase().replace(/[!?.…,]/g, ' ').replace(/\s+/g, ' ').trim();
+  const torchWord = /(f[əe]n[əe]r|fanar|iş[ıi]q)/.test(t);
+
+  if (torchWord) {
+    const on = /(yan|yand[ıi]r|aç|ac\b)/.test(t);
+    const off = /(s[öo]nd[üu]r|ba[ğg]la|s[öo]n)/.test(t);
+    if (on || off) {
+      const action = on && !off ? 'torch_on' : 'torch_off';
+      const res = await executeTool('device_action', { action });
+      logTool('device_action', { action }, res);
+      if (res?.ok) return res.message || (action === 'torch_on' ? 'Fənər yandırıldı.' : 'Fənər söndürüldü.');
+      return res?.error || 'Fənəri idarə etmək alınmadı.';
+    }
+  }
+
+  if (/(saat ne[çc][əe]|ne[çc][əe] saat|saat ne[çc][əe]dir)/.test(t)) {
+    const res = await executeTool('get_time', {});
+    logTool('get_time', {}, res);
+    if (res?.ok) return `İndi saat ${res.saat}, ${res.tarix}.`;
+  }
+
+  return null;
+}
 
 /** Limit (402/429) zamanı xəta yerine sayğaclı gözləmə göstəririk. */
 function handleWait(ms) {
@@ -457,8 +491,12 @@ function openSettings() {
 }
 
 function saveSettings() {
+  const key = $('#st-key').value.trim();
+  // Açar varsa beyin həmişə Gemini-dir — provayder səhv qalmasın.
+  const provider = key ? 'gemini' : $('#st-provider').value;
+
   store.setSettings({
-    provider: $('#st-provider').value,
+    provider,
     apiKey: $('#st-key').value.trim(),
     model: $('#st-model').value.trim(),
     baseUrl: $('#st-base').value.trim(),

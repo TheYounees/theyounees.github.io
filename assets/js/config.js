@@ -61,7 +61,7 @@ export const PROVIDERS = {
 };
 
 export const DEFAULT_SETTINGS = {
-  provider: 'pollinations',
+  provider: 'gemini',
   apiKey: '',
   baseUrl: '',
   model: '',

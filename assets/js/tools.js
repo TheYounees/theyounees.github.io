@@ -62,12 +62,17 @@ async function setTorch(on) {
         video: { facingMode: { ideal: 'environment' } }
       });
       const track = stream.getVideoTracks()[0];
-      const caps = track.getCapabilities ? track.getCapabilities() : {};
-      if (!caps.torch) {
-        stream.getTracks().forEach((t) => t.stop());
-        return fail('Bu cihaz/tarayıcı fənəri dəstəkləmir (əsasən Android Chrome lazımdır).');
-      }
+      // Bəzi Android Chrome versiyaları torch-u `getCapabilities`-də göstərmir,
+      // ona görə dərhal imtina etmirik — tətbiq edib nəticəni yoxlayırıq.
       await track.applyConstraints({ advanced: [{ torch: true }] });
+      await new Promise((r) => setTimeout(r, 350));
+      const settingsNow = track.getSettings ? track.getSettings() : {};
+
+      if (settingsNow.torch === false) {
+        stream.getTracks().forEach((t) => t.stop());
+        return fail('Bu cihaz/tarayıcı fənəri dəstəkləmir (Android Chrome lazımdır).');
+      }
+
       torchState = { stream, on: true };
       return ok({ message: 'Fənər yandırıldı.' });
     } catch (err) {

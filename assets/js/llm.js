@@ -103,7 +103,8 @@ export async function fetchModels(settings) {
 
   if (settings.provider === 'gemini') {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(settings.apiKey)}`
+      `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(settings.apiKey)}`,
+      { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined }
     );
     if (!res.ok) throw new Error(errorMessage(res.status, null));
     const data = await res.json();
@@ -126,7 +127,10 @@ export async function fetchModels(settings) {
   if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
   let res;
   try {
-    res = await fetch(`${cfg.baseUrl}/models`, { headers });
+    res = await fetch(`${cfg.baseUrl}/models`, {
+      headers,
+      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
+    });
   } catch {
     throw new Error('Model siyahısına qoşulmaq alınmadı.');
   }
@@ -219,7 +223,8 @@ async function fetchWithTimeout(url, init, signal, timeoutMs) {
 
 export async function chatRequest({ settings, messages, tools, signal, onWait }) {
   const { cfg, url } = endpoint(settings);
-  const timeoutMs = Number(settings.requestTimeout) > 0 ? Number(settings.requestTimeout) : 45000;
+  const timeoutMs = Number(settings.requestTimeout) > 0 ? Number(settings.requestTimeout) : 15000;
+  // Gemini adətən 1–3 saniyədə cavab verir; 15 saniyə kifayətdir və uzun donmaların qarşısını alır.
   const headers = { 'Content-Type': 'application/json' };
   if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
   if (settings.provider === 'openrouter') {
