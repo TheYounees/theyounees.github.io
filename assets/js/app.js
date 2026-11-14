@@ -148,6 +148,8 @@ function init() {
 }
 
 function refreshDriveStatus() {
+  const redirectEl = document.querySelector('#st-drive-redirect');
+  if (redirectEl) redirectEl.textContent = drive.redirectUri();
   const el = document.querySelector('#st-drive-status');
   if (!el) return;
   if (drive.isConnected()) {

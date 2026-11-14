@@ -45,6 +45,12 @@ export class DriveSync {
 
   getClientId() { return this.clientId; }
 
+  /** OAuth redirect URI — Google Cloud Console-da eyni ilə qeydiyyatdan keçməlidir. */
+  redirectUri() {
+    const path = window.location.pathname && window.location.pathname !== '/' ? window.location.pathname : '/';
+    return window.location.origin + path;
+  }
+
   isConnected() {
     return Boolean(this.token?.access_token) && !this.isExpired();
   }
@@ -87,7 +93,7 @@ export class DriveSync {
     sessionStorage.setItem(VERIFIER_KEY, verifier);
     sessionStorage.setItem(STATE_KEY, state);
 
-    const redirectUri = window.location.origin + window.location.pathname;
+    const redirectUri = this.redirectUri();
     const params = new URLSearchParams({
       client_id: this.clientId,
       redirect_uri: redirectUri,
@@ -131,7 +137,7 @@ export class DriveSync {
       throw new Error('Client ID tapılmadı.');
     }
 
-    const redirectUri = window.location.origin + window.location.pathname;
+    const redirectUri = this.redirectUri();
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
