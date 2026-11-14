@@ -378,6 +378,25 @@ class UI {
     this.voices = voices;
   }
 
+  /* ---- söhbətlər ---- */
+  renderChats(chats, activeId) {
+    const list = $('#chat-list');
+    if (!list) return;
+    if (!chats?.length) {
+      list.innerHTML = '<li class="mem-empty">Hələ söhbət yoxdur.</li>';
+      return;
+    }
+    list.innerHTML = chats.map((c) => {
+      const active = c.id === activeId ? ' active' : '';
+      const count = (c.messages || []).length;
+      return `<li class="chat-item${active}" data-chat="${c.id}">
+        <span class="chat-title">${esc(c.title || 'Yeni söhbət')}</span>
+        <span class="chat-count">${count}</span>
+        <button class="chat-del" data-chat-del="${c.id}" aria-label="Sil">×</button>
+      </li>`;
+    }).join('');
+  }
+
   /* ---- yaddaş paneli ---- */
   renderMemory(state) {
     const factsList = $('#facts-list');

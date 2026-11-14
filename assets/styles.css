@@ -815,3 +815,14 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
+
+
+/* söhbət siyahısı */
+.chat-list { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.chat-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+.chat-item:hover { background: rgba(56,232,255,0.07); }
+.chat-item.active { border-color: rgba(56,232,255,0.45); background: rgba(56,232,255,0.1); }
+.chat-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.92rem; }
+.chat-count { font-size: 0.72rem; opacity: 0.6; }
+.chat-del { background: transparent; border: none; color: inherit; opacity: 0.55; font-size: 1rem; cursor: pointer; padding: 0 4px; }
+.chat-del:hover { opacity: 1; color: #ff6b6b; }

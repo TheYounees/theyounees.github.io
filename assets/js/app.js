@@ -64,6 +64,7 @@ function init() {
   drive.setClientId(store.state.settings.driveClientId || '');
   ui.fillProfileFields(store.state.profile);
   ui.renderMemory(store.state);
+  renderChats();
   ui.setMuteState(!store.state.settings.speak);
   ui.setWakeState(Boolean(store.state.settings.wakeWord));
 
@@ -87,6 +88,7 @@ function init() {
   store.subscribe((type) => {
     if (type === 'change') {
       ui.renderMemory(store.state);
+      renderChats();
       if (drive.isConnected()) drive.scheduleSync(store.state);
     }
   });
@@ -103,6 +105,7 @@ function init() {
           ui.fillProfileFields(store.state.profile);
           restoreTranscript();
           ui.renderMemory(store.state);
+          renderChats();
         }
         refreshDriveStatus();
       }
@@ -121,6 +124,7 @@ function init() {
           ui.fillProfileFields(store.state.profile);
           restoreTranscript();
           ui.renderMemory(store.state);
+          renderChats();
         }
         refreshDriveStatus();
       } catch (err) {
@@ -179,8 +183,38 @@ function modeLabel() {
   return 'Onlayn';
 }
 
+function renderChats() {
+  ui.renderChats(store.listChats(), store.state.activeChatId);
+}
+
+function openChat(id) {
+  if (id === store.state.activeChatId) { ui.closeDrawer(); return; }
+  if (!store.switchChat(id)) return;
+  ui.clearTranscript();
+  restoreTranscript();
+  ui.closeDrawer();
+  ui.setStatus(modeLabel());
+}
+
+function newChat() {
+  store.newChat();
+  ui.clearTranscript();
+  ui.renderEmptyState();
+  ui.closeDrawer();
+  ui.toast('Yeni söhbət açıldı.');
+}
+
+function deleteChat(id) {
+  if (!confirm('Bu söhbət silinsin?')) return;
+  store.deleteChat(id);
+  if (id === store.state.activeChatId) {
+    ui.clearTranscript();
+    restoreTranscript();
+  }
+}
+
 function restoreTranscript() {
-  const messages = store.state.messages.slice(-60);
+  const messages = store.activeMessages().slice(-60);
   if (!messages.length) {
     ui.renderEmptyState();
     return;
@@ -662,6 +696,13 @@ function bindEvents() {
     ui.openDrawer();
   });
   $('#btn-drawer-close').addEventListener('click', () => ui.closeDrawer());
+  $('#chat-new')?.addEventListener('click', newChat);
+  $('#chat-list')?.addEventListener('click', (e) => {
+    const del = e.target.closest('[data-chat-del]');
+    if (del) { deleteChat(del.dataset.chatDel); return; }
+    const item = e.target.closest('[data-chat]');
+    if (item) openChat(item.dataset.chat);
+  });
   $('#scrim').addEventListener('click', () => ui.closeDrawer());
 
   $('#btn-attach').addEventListener('click', () => $('#file-input').click());

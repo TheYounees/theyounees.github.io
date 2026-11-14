@@ -89,6 +89,7 @@ function errorMessage(status, body) {
   }
   if (status === 401 || status === 403) return 'API açarı qəbul edilmədi (401/403). Tənzimləmələrdən açarı yoxlayın.';
   if (status === 429) return 'Limit aşıldı (429). Bir az sonra yenidən cəhd edin və ya başqa model seçin.';
+  if (status === 413) return 'Sorğu model üçün çox böyükdür (413). Keçmiş qısaldılır və daha geniş limitli model sınanır.';
   if (status === 404) {
     return `Model və ya endpoint tapılmadı (404). Provayder modeli dəyişmiş ola bilər — Tənzimləmələrdə “Gətir” düyməsi ilə model siyahısını yeniləyin.${detail ? ' ' + detail : ''}`;
   }
@@ -156,6 +157,34 @@ export function pickModel(ids, provider) {
   });
   scored.sort((a, b) => b.score - a.score);
   return scored[0].id;
+}
+
+function estimateTokens(value) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  return Math.ceil(String(text || '').length / 4);
+}
+
+/** Mesajları token büdcəsinə sığdırır: sistem təlimatı + ən son mesajlar. */
+function trimMessages(messages, budgetTokens, tools) {
+  if (!Array.isArray(messages) || !messages.length) return messages;
+  const toolsCost = tools?.length ? estimateTokens(tools) : 0;
+  const budget = Math.max(1200, (budgetTokens || 6000) - toolsCost);
+  const system = messages[0]?.role === 'system' ? [messages[0]] : [];
+  let used = system.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+  const tail = [];
+  const start = system.length ? 1 : 0;
+  for (let i = messages.length - 1; i >= start; i--) {
+    const msg = messages[i];
+    const cost = estimateTokens(msg.content) + 16;
+    if (used + cost > budget && tail.length) break;
+    used += cost;
+    tail.unshift(msg);
+  }
+  // Alət cavabı tək qalmasın: başlanğıcdakı tool/assistant-tool_calls mesajlarını atırıq.
+  while (tail.length && (tail[0].role === 'tool' || (tail[0].role === 'assistant' && tail[0].tool_calls))) {
+    tail.shift();
+  }
+  return [...system, ...tail];
 }
 
 const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
@@ -226,9 +255,10 @@ export async function chatRequest({ settings, messages, tools, signal, onWait, o
     headers['X-Title'] = 'JARVIS';
   }
 
+  let budget = Number(settings.tokenBudget) > 0 ? Number(settings.tokenBudget) : 6000;
   const payload = {
     model: cfg.model,
-    messages,
+    messages: trimMessages(messages, budget, tools),
     temperature: Number(settings.temperature ?? 0.75)
   };
   if (tools?.length) {
@@ -245,6 +275,7 @@ export async function chatRequest({ settings, messages, tools, signal, onWait, o
   // Pulsuz tier-lərdə 429/5xx (model overloaded) tez-tez olur — qısa fasilə ilə yenidən cəhd edirik.
   for (let attempt = 0; attempt < MAX_HTTP_ATTEMPTS; attempt++) {
     payload.model = models[modelIndex];
+    payload.messages = trimMessages(messages, budget, tools);
 
     let res = null;
     let timedOut = false;
@@ -316,8 +347,18 @@ export async function chatRequest({ settings, messages, tools, signal, onWait, o
       continue;
     }
 
-    // Model limiti / model tapılmadı → növbəti modeli sınayırıq (kvotalar ayrıdır).
-    if ((res.status === 429 || res.status === 404) && modelIndex < models.length - 1) {
+    // 413: sorğu çox böyükdür — büdcəni kiçildib təkrar cəhd edirik.
+    if (res.status === 413) {
+      const nextBudget = Math.max(1200, Math.floor(budget * 0.6));
+      if (nextBudget < budget) {
+        budget = nextBudget;
+        await pause(300, signal);
+        continue;
+      }
+    }
+
+    // Model limiti / model tapılmadı / sorğu çox böyük → növbəti modeli sınayırıq (kvotalar ayrıdır).
+    if ((res.status === 429 || res.status === 404 || res.status === 413) && modelIndex < models.length - 1) {
       modelIndex += 1;
       onModelChange?.(models[modelIndex]);
       await pause(400, signal);

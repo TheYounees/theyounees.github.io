@@ -14,10 +14,10 @@ export const PROVIDERS = {
     label: 'Groq (çox sürətli)',
     baseUrl: 'https://api.groq.com/openai/v1',
     model: 'llama-3.3-70b-versatile',
-    keyHint: 'console.groq.com/keys — pulsuz açar, cavab demək olar dərhal gəlir. Gemini limiti dolanda ideal alternativdir.',
+    keyHint: 'console.groq.com/keys — pulsuz açar. 413/limit xətasında avtomatik yüngül modelə keçir.',
     needsKey: true,
     vision: false,
-    fallbacks: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b']
+    fallbacks: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-20b']
   },
   openrouter: {
     label: 'OpenRouter (çox model)',
@@ -84,7 +84,8 @@ export const DEFAULT_SETTINGS = {
   wakeWord: false,
   searchKey: '',
   city: 'Bakı',
-  historyLimit: 24,
+  historyLimit: 16,
+  tokenBudget: 6000,
   driveClientId: '',
   driveSync: false
 };

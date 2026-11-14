@@ -74,6 +74,7 @@ R8-in real faydası: dex 11% kiçildi, köməkçi siniflər obfuscate olundu (`M
 
 ### Versiya tarixçəsi
 
+- **2.3** (versionCode 14) — Groq 413/TPM xətası düzəldildi: standart model `llama-3.3-70b-versatile`, sorğu token büdcəsi (6000) və 413 zamanı avtomatik qısaltma/model rotasiyası; ayrı-ayrı söhbətlər və sol menyuda keçmiş söhbətlər; Google Drive sinxronizasiyası bütün söhbətləri əhatə edir; “jarvis” arxa plan foreground service-i və boot-da bərpa.
 - **2.1** (versionCode 12) — Gemini 429/404 verəndə avtomatik yüngül modelə keçid (hər modelin kvotası ayrıdır); Groq və OpenRouter provayderləri geri əlavə edildi; 402 gözləməsi maksimum 4 saniyə.
 - **2.0** (versionCode 11) — pulsuz ehtiyat rejimi tamamilə çıxarıldı (113 saniyəlik gözləmənin səbəbi); açar yoxdursa dərhal "Açar lazımdır" mesajı və görünən "🔑 Gemini açarını qoş" düyməsi; 400 xətası üçün aydın izah; modelin uydurma alət adları rədd edilir.
 - **1.9** (versionCode 10) — beyin yalnız Gemini (digər provayderlər gizlədildi), açar yazılanda provayder avtomatik Gemini olur, sorğu timeout-u 15 saniyə, fənər/saat kimi əmrlər modelə getmədən dərhal icra olunur.
