@@ -489,6 +489,9 @@ public class MainActivity extends Activity {
         java.util.Map<String, String> map = new java.util.HashMap<>();
         map.put("youtube", "com.google.android.youtube");
         map.put("spotify", "com.spotify.music");
+        map.put("musiqi", "com.spotify.music");
+        map.put("musiq", "com.spotify.music");
+        map.put("music", "com.spotify.music");
         map.put("whatsapp", "com.whatsapp");
         map.put("telegram", "org.telegram.messenger");
         map.put("instagram", "com.instagram.android");

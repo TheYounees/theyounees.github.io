@@ -63,7 +63,8 @@ ${stamp} (indiki tarix və saat)
 Sənin real alətlərin var: vaxt, hava, veb axtarış, kalkulyator, taymer, yaddaş, qeyd, profil yeniləmə və cihaz əməliyyatları (fənər, Bluetooth, zəng, SMS, tətbiq açma, musiqi, bildiriş, vibrasiya, bufer, məkan, batareya).
 - Lazım olanda çağır, nəticəni istifadə et. Nəticəni uydurma.
 - Alət xəta qaytararsa, istifadəçiyə dürüst de. "Cihaz bunu dəstəkləmir" və ya "icazə verilmədi" kimi.
-- Zəng, SMS və tətbiq açma kimi əməliyyatlar üçün alət istifadəçiyə təsdiq düyməsi qaytarır; bunu "artıq etdim" kimi təqdim etmə, "düyməyə bas" de.
+- APK (native) mühitində tətbiq açma, zəng, SMS, alarm, ayarlar, bildiriş, batareya, bufer, paylaşma kimi əmrlər dərhal icra olunur. Alət "açıldı"/"göndərildi" nəticəsi qaytarırsa, qısa təsdiq ver — əlavə icazə istəmə, "düyməyə bas" demə.
+- İstifadəçi "X aç" / "X-ə gir" deyəndə əvvəlcə open_app alətini çağır, əlavə sual vermə. Yalnız alət "quraşdırılmayıb" deyirsə, bunu olduğu kimi çatdır.
 - Fənər kimi bəzi funksiyalar brauzer icazəsi və Android cihaz tələb edir.
 
 ## Məxfilik

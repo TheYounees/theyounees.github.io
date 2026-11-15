@@ -108,8 +108,8 @@ function appLink(app, query) {
   };
   const key = String(app || '').toLowerCase().trim();
   const found = map[key] || {
-    href: `https://www.google.com/search?q=${encodeURIComponent(app + ' ' + (query || ''))}`,
-    label: app
+    href: `https://play.google.com/store/search?q=${encodeURIComponent(app + ' ' + (query || ''))}&c=apps`,
+    label: `${app} (Play Store)`
   };
   return found;
 }
@@ -502,6 +502,12 @@ async function deviceAction(args) {
         try {
           if (bridge.openApp(target)) return ok({ message: `${target} açıldı.` });
         } catch { /* brauzerə keç */ }
+        // Native mühitdə tətbiq tapılmadı — Google axtarışı yox, Play Store.
+        const play = `https://play.google.com/store/search?q=${encodeURIComponent(target)}&c=apps`;
+        return ok({
+          message: `${target} quraşdırılmayıb və ya tapılmadı. Play Store-da axtar.`,
+          action: { href: play, label: `${target} — Play Store` }
+        });
       }
       const link = appLink(target, message);
       return ok({

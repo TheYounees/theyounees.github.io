@@ -364,6 +364,25 @@ async function tryLocalCommand(text) {
     }
   }
 
+  // "X aç" / "X-ə gir" — native mühitdə dərhal aç, modelə göndərmədən.
+  let native = null;
+  try {
+    if (window.JarvisNative?.available?.()) native = window.JarvisNative;
+  } catch { /* körpü yoxdur */ }
+
+  if (native && /(aç|ac|gir)(?![a-zəıöüşçğ])/.test(t)
+      && !/(plan|hesab|söhbət|mesaj|qeyd|yaddaş|axtar|sayt|link|bluetooth|wifi|wi-fi|internet|parlaqlıq|səs|zəng səsi|rejim)/.test(t)) {
+    const m = t.match(/^(.*?)\s*(?:aç|ac|gir)(?![a-zəıöüşçğ])/);
+    let name = (m?.[1] || '').trim();
+    name = name.replace(/-[a-zəıöüşçğ]+$/, '').trim();
+    name = name.replace(/(n[ıiuü]|[ıiuü])$/, '').trim();
+    if (name && name.length > 1) {
+      const res = await executeTool('device_action', { action: 'open_app', target: name });
+      logTool('device_action', { action: 'open_app', target: name }, res);
+      if (res?.ok) return res.message || `${name} açıldı.`;
+    }
+  }
+
   if (/(saat ne[çc][əe]|ne[çc][əe] saat|saat ne[çc][əe]dir)/.test(t)) {
     const res = await executeTool('get_time', {});
     logTool('get_time', {}, res);
