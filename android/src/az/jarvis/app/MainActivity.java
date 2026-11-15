@@ -10,6 +10,9 @@ import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.media.AudioManager;
 import android.os.BatteryManager;
 import android.provider.AlarmClock;
@@ -80,6 +83,10 @@ public class MainActivity extends Activity {
     private String torchCameraId = null;
 
     private long lastLevelEmit = 0;
+    private String pendingDriveUrl = null;
+    private LocationManager locationManager;
+    private Location lastLocation;
+    private boolean locationRequested = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -117,6 +124,11 @@ public class MainActivity extends Activity {
                     return assetResponse(uri.getPath());
                 }
                 return null;
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                flushDriveUrl();
             }
 
             @Override
@@ -162,6 +174,7 @@ public class MainActivity extends Activity {
         });
 
         web.addJavascriptInterface(new Bridge(), "JarvisNative");
+        handleIntent(getIntent());
         root.addView(web, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -179,6 +192,9 @@ public class MainActivity extends Activity {
         }
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             wanted.add(Manifest.permission.CAMERA);
+        }
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            wanted.add(Manifest.permission.ACCESS_FINE_LOCATION);
         }
         if (Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -471,6 +487,65 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String getLocation() {
+            try {
+                Location l = lastLocation;
+                if (l == null) l = lastKnownLocation();
+                if (l == null) return "{\"ok\":false}";
+                JSONObject o = new JSONObject();
+                o.put("ok", true);
+                o.put("lat", l.getLatitude());
+                o.put("lng", l.getLongitude());
+                o.put("acc", Math.round(l.getAccuracy()));
+                return o.toString();
+            } catch (Exception e) {
+                return "{\"ok\":false}";
+            }
+        }
+
+        @JavascriptInterface
+        public void requestLocation() {
+            runOnUiThread(() -> startLocationUpdates(true));
+        }
+
+        @JavascriptInterface
+        public boolean navigate(String destination, String app) {
+            try {
+                String dest = destination == null ? "" : destination.trim();
+                String a = app == null ? "" : app.toLowerCase();
+                if (a.contains("waze") && isPackageInstalled("com.waze")) {
+                    String q = "waze://?q=" + Uri.encode(dest) + (dest.isEmpty() ? "" : "&navigate=yes");
+                    Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(q));
+                    i.setPackage("com.waze");
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                    return true;
+                }
+                if (a.contains("yandex") && isPackageInstalled("ru.yandex.yandexnavi")) {
+                    Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse("yandexnavi://build_route_on_map?to=" + Uri.encode(dest)));
+                    i.setPackage("ru.yandex.yandexnavi");
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                    return true;
+                }
+                Intent g = new Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=" + Uri.encode(dest)));
+                g.setPackage("com.google.android.apps.maps");
+                g.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                try {
+                    startActivity(g);
+                    return true;
+                } catch (Exception noMaps) {
+                    Intent geo = new Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(dest)));
+                    geo.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(geo);
+                    return true;
+                }
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
         public boolean hasMicPermission() {
             return checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
         }
@@ -479,6 +554,52 @@ public class MainActivity extends Activity {
         public void requestPermissionsNow() {
             runOnUiThread(MainActivity.this::requestAppPermissions);
         }
+    }
+
+    private boolean isPackageInstalled(String pkg) {
+        try { getPackageManager().getPackageInfo(pkg, 0); return true; }
+        catch (Exception e) { return false; }
+    }
+
+    private Location lastKnownLocation() {
+        try {
+            if (locationManager == null) locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null;
+            Location best = null;
+            String[] providers = new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER};
+            for (String p : providers) {
+                try {
+                    Location l = locationManager.getLastKnownLocation(p);
+                    if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
+                } catch (Exception ignored) {}
+            }
+            return best;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void startLocationUpdates(boolean requestPermission) {
+        try {
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                if (requestPermission) requestAppPermissions();
+                return;
+            }
+            if (locationManager == null) locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+            if (!locationRequested) {
+                locationRequested = true;
+                LocationListener listener = new LocationListener() {
+                    @Override public void onLocationChanged(Location l) { if (l != null) lastLocation = l; }
+                    @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
+                    @Override public void onProviderEnabled(String provider) {}
+                    @Override public void onProviderDisabled(String provider) {}
+                };
+                try { locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 60000, 30, listener, getMainLooper()); } catch (Exception ignored) {}
+                try { locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 60000, 30, listener, getMainLooper()); } catch (Exception ignored) {}
+            }
+            Location l = lastKnownLocation();
+            if (l != null) lastLocation = l;
+        } catch (Exception ignored) {}
     }
 
     private String resolvePackage(String name) {
@@ -789,6 +910,37 @@ public class MainActivity extends Activity {
     /* ---------------- həyat dövrü ---------------- */
 
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIntent(intent);
+    }
+
+    private void handleIntent(Intent intent) {
+        try {
+            if (intent == null || intent.getData() == null) return;
+            Uri data = intent.getData();
+            if ("azjarvis".equals(data.getScheme()) && "oauth".equals(data.getHost())) {
+                pendingDriveUrl = data.toString();
+                flushDriveUrl();
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void flushDriveUrl() {
+        if (pendingDriveUrl == null || web == null) return;
+        final String url = pendingDriveUrl;
+        pendingDriveUrl = null;
+        web.post(() -> {
+            try {
+                web.evaluateJavascript(
+                        "window.__jarvisNative && window.__jarvisNative.onDriveRedirect && window.__jarvisNative.onDriveRedirect("
+                                + JSONObject.quote(url) + ");", null);
+            } catch (Exception ignored) {}
+        });
+    }
+
+    @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQ_FILE) {
             Uri[] results = null;
@@ -832,6 +984,9 @@ public class MainActivity extends Activity {
         if (wakeEnabled && !wakeRunning) {
             wakeRunning = true;
             startRecognition(true);
+        }
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            startLocationUpdates(false);
         }
     }
 

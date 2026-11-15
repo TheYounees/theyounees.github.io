@@ -45,8 +45,16 @@ export class DriveSync {
 
   getClientId() { return this.clientId; }
 
+  /** Native körpü (APK) varsa OAuth xarici brauzerdə aparılır. */
+  isNative() {
+    try {
+      return Boolean(window.JarvisNative?.available?.());
+    } catch { return false; }
+  }
+
   /** OAuth redirect URI — Google Cloud Console-da eyni ilə qeydiyyatdan keçməlidir. */
   redirectUri() {
+    if (this.isNative()) return 'https://theyounees.github.io/oauth-callback.html';
     const path = window.location.pathname && window.location.pathname !== '/' ? window.location.pathname : '/';
     return window.location.origin + path;
   }
@@ -105,37 +113,35 @@ export class DriveSync {
       prompt: 'consent',
       access_type: 'offline'
     });
-    window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+    if (this.isNative()) {
+      // APK: xarici brauzerdə açırıq; cavab azjarvis:// deep link ilə geri gəlir.
+      this.emit('opening', null);
+      window.JarvisNative.openUrl(authUrl);
+      return;
+    }
+    window.location.href = authUrl;
   }
 
-  /* Səhifə yüklənəndə callback parametrlərini yoxlayır. Token alınıbsa true qaytarır. */
-  async handleCallback() {
-    const url = new URL(window.location.href);
+  /** Native deep link (azjarvis://oauth?code=...) ilə gələn cavabı emal edir. */
+  async handleRedirect(rawUrl) {
+    let url;
+    try { url = new URL(rawUrl); } catch { return false; }
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
     const error = url.searchParams.get('error');
-    if (error) {
-      this.cleanUrl();
-      throw new Error('Google Drive bağlantısı ləğv edildi: ' + error);
-    }
+    if (error) throw new Error('Google Drive bağlantısı ləğv edildi: ' + error);
     if (!code) return false;
+    return this.exchangeCode(code, state);
+  }
 
+  async exchangeCode(code, state) {
     const savedState = sessionStorage.getItem(STATE_KEY);
-    if (!state || state !== savedState) {
-      this.cleanUrl();
-      throw new Error('OAuth state uyğun gəlmir.');
-    }
+    if (!state || state !== savedState) throw new Error('OAuth state uyğun gəlmir.');
     const verifier = sessionStorage.getItem(VERIFIER_KEY);
-    if (!verifier) {
-      this.cleanUrl();
-      throw new Error('OAuth verifier tapılmadı.');
-    }
-
+    if (!verifier) throw new Error('OAuth verifier tapılmadı.');
     const clientId = this.clientId || localStorage.getItem(CLIENT_KEY) || '';
-    if (!clientId) {
-      this.cleanUrl();
-      throw new Error('Client ID tapılmadı.');
-    }
+    if (!clientId) throw new Error('Client ID tapılmadı.');
 
     const redirectUri = this.redirectUri();
     const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -149,13 +155,10 @@ export class DriveSync {
         redirect_uri: redirectUri
       })
     });
-
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.access_token) {
-      this.cleanUrl();
       throw new Error(data.error_description || data.error || 'Token alınmadı.');
     }
-
     const token = {
       access_token: data.access_token,
       refresh_token: data.refresh_token || this.token?.refresh_token || null,
@@ -167,6 +170,20 @@ export class DriveSync {
     this.cleanUrl();
     this.emit('connected', null);
     return true;
+  }
+
+  /* Səhifə yüklənəndə callback parametrlərini yoxlayır. Token alınıbsa true qaytarır. */
+  async handleCallback() {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
+    const error = url.searchParams.get('error');
+    if (error) {
+      this.cleanUrl();
+      throw new Error('Google Drive bağlantısı ləğv edildi: ' + error);
+    }
+    if (!code) return false;
+    return this.exchangeCode(code, state);
   }
 
   cleanUrl() {

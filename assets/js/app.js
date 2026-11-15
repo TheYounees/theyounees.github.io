@@ -139,7 +139,33 @@ function init() {
     })();
   }
 
+  // APK: Google OAuth xarici brauzerdə tamamlanır, nəticə azjarvis:// deep link ilə qayıdır.
+  window.__jarvisNative = window.__jarvisNative || {};
+  window.__jarvisNative.onDriveRedirect = async (url) => {
+    try {
+      const ok = await drive.handleRedirect(url);
+      if (ok) {
+        ui.toast('Google Drive bağlandı. Yaddaş sinxronizasiya olunur…');
+        const merged = await drive.pullAndMerge(store.state);
+        if (merged && merged !== store.state) {
+          store.replaceState(merged);
+          ui.fillProfileFields(store.state.profile);
+          restoreTranscript();
+          ui.renderMemory(store.state);
+          renderChats();
+        }
+        refreshDriveStatus();
+      }
+    } catch (err) {
+      ui.toast(err.message || 'Google Drive xətası.', 'err');
+    }
+  };
+
   drive.onEvent((type, detail) => {
+    if (type === 'opening') {
+      ui.toast('Google girişi brauzerdə açıldı. Girişi tamamlayın və tətbiqə qayıdın.');
+      return;
+    }
     if (type === 'connected' || type === 'disconnected' || type === 'synced' || type === 'pulled' || type === 'error') {
       refreshDriveStatus();
       if (type === 'error') ui.toast('Drive: ' + (detail || 'xəta'), 'err');

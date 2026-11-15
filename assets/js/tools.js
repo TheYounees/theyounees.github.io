@@ -25,6 +25,7 @@ function degToCompass(deg) {
 
 function ok(data) { return { ok: true, ...data }; }
 function fail(error) { return { ok: false, error }; }
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ---------------- fənər (torch) ---------------- */
 
@@ -432,10 +433,11 @@ export const TOOL_DEFS = [
         properties: {
           action: {
             type: 'string',
-            enum: ['torch_on', 'torch_off', 'bluetooth', 'call', 'sms', 'open_app', 'music', 'notify', 'vibrate', 'clipboard_copy', 'location', 'battery', 'share', 'open_settings', 'alarm']
+            enum: ['torch_on', 'torch_off', 'bluetooth', 'call', 'sms', 'open_app', 'music', 'notify', 'vibrate', 'clipboard_copy', 'location', 'battery', 'share', 'open_settings', 'alarm', 'navigate']
           },
           target: { type: 'string', description: 'Nömrə, tətbiq adı, mətn, ayar adı (bluetooth, wifi, sound) və ya axtarış sözü' },
           message: { type: 'string', description: 'SMS mətni və ya bildiriş mətni' },
+          app: { type: 'string', description: 'Naviqasiya tətbiqi: waze, yandex, google (istəyə bağlı)' },
           hour: { type: 'number', description: 'Alarm saatı (0–23)' },
           minute: { type: 'number', description: 'Alarm dəqiqəsi (0–59)' }
         },
@@ -572,6 +574,25 @@ async function deviceAction(args) {
     }
 
     case 'location': {
+      if (has('getLocation')) {
+        try {
+          let info = JSON.parse(bridge.getLocation());
+          if (!info?.ok && has('requestLocation')) {
+            bridge.requestLocation();
+            await wait(1800);
+            info = JSON.parse(bridge.getLocation());
+          }
+          if (info?.ok) {
+            const coords = `${Number(info.lat).toFixed(5)}, ${Number(info.lng).toFixed(5)}`;
+            return ok({
+              koordinatlar: coords,
+              dəqiqlik: info.acc ? `${info.acc} m` : null,
+              mesaj: 'Məkan təyin edildi.',
+              action: { href: `https://www.google.com/maps?q=${coords}`, label: 'Xəritədə aç' }
+            });
+          }
+        } catch { /* brauzerə keç */ }
+      }
       if (!navigator.geolocation) return fail('Məkan xidməti dəstəklənmir.');
       return new Promise((resolve) => {
         navigator.geolocation.getCurrentPosition(
@@ -617,6 +638,23 @@ async function deviceAction(args) {
       } catch {
         return fail('Paylaşma ləğv edildi.');
       }
+    }
+
+    case 'navigate': {
+      const destination = target || message;
+      if (!destination) return fail('Mənzil (ünvan) lazımdır.');
+      const navApp = target && message ? message : (args.app || '');
+      if (has('navigate')) {
+        try {
+          if (bridge.navigate(destination, navApp)) {
+            return ok({ message: `${navApp || 'Xəritə'} açıldı — ${destination} istiqamətində yol göstərilir.` });
+          }
+        } catch { /* brauzerə keç */ }
+      }
+      return ok({
+        message: `${destination} üçün yol göstərilir.`,
+        action: { href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`, label: 'Yol göstər' }
+      });
     }
 
     case 'open_settings': {

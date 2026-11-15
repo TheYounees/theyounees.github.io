@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JARVIS — Google Drive</title>
+<style>
+  body { margin:0; min-height:100vh; display:grid; place-items:center; background:#05080c; color:#cfe9f5;
+         font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; text-align:center; padding:24px; }
+  .box { max-width:420px; }
+  h1 { font-size:1.2rem; font-weight:600; margin:0 0 10px; color:#38e8ff; letter-spacing:.06em; }
+  p { line-height:1.5; font-size:.95rem; opacity:.85; }
+  a { color:#38e8ff; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>JARVIS</h1>
+  <p id="msg">Google Drive bağlantısı tamamlanır…</p>
+</div>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var code = params.get('code');
+  var state = params.get('state');
+  var error = params.get('error');
+  var deep = 'azjarvis://oauth?';
+  if (code) deep += 'code=' + encodeURIComponent(code);
+  if (state) deep += (code ? '&' : '') + 'state=' + encodeURIComponent(state);
+  if (error) deep += (code || state ? '&' : '') + 'error=' + encodeURIComponent(error);
+
+  var msg = document.getElementById('msg');
+  if (!code && !error) {
+    msg.textContent = 'Bu səhifə yalnız JARVIS tətbiqindən Google Drive bağlantısı üçün istifadə olunur.';
+    return;
+  }
+  msg.textContent = 'JARVIS tətbiqinə qayıdılır…';
+  // Tətbiqə deep link ilə qayıdırıq.
+  location.replace(deep);
+  setTimeout(function () {
+    msg.innerHTML = 'Tətbiq açılmadısa, <a id="open" href="' + deep + '">buraya basın</a>.';
+  }, 1200);
+})();
+</script>
+</body>
+</html>
