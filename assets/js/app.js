@@ -145,6 +145,8 @@ function init() {
 
   restoreTranscript();
   bindEvents();
+  adaptPlatformUi();
+  showShellInfo();
   refreshAssistantState();
   ui.setStatus(modeLabel());
 
@@ -1101,16 +1103,31 @@ function exposeApkDownload() {
   if (local) link.hidden = false;
 }
 
+const APP_VERSION = '3.0';
+
 function showShellInfo() {
+  const el = $('#app-version');
   const bridge = window.JarvisNative;
-  if (!bridge?.deviceInfo) return;
+  if (!el) return;
+  if (!bridge?.deviceInfo) {
+    el.textContent = `Veb versiya ${APP_VERSION}`;
+    return;
+  }
   try {
     const info = JSON.parse(bridge.deviceInfo());
-    const el = $('#app-version');
-    if (el) el.textContent = `APK ${info.version || ''} · ${info.model || ''} · Android ${info.sdk || ''}`.trim();
+    el.textContent = `APK ${info.version || APP_VERSION} · ${info.model || ''} · Android ${info.sdk || ''}`.trim();
   } catch {
-    /* məlumat alınmadı */
+    el.textContent = `APK ${APP_VERSION}`;
   }
+}
+
+/** Telefon idarəetməsi yalnız APK-da göstərilir. */
+function adaptPlatformUi() {
+  const native = Boolean(window.JarvisNative?.available?.());
+  const section = $('#native-tools');
+  if (section) section.hidden = !native;
+  const wake = $('#st-wake');
+  if (wake) wake.closest('label')?.setAttribute('title', native ? '' : 'Brauzerdə arxa plan oyanması məhduddur.');
 }
 
 function registerServiceWorker() {

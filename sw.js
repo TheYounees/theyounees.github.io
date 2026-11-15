@@ -1,6 +1,6 @@
 /* JARVIS service worker — yalnız tətbiq qabığını keşləyir.
    API sorğuları heç vaxt keşlənmir, şəxsi məlumat diskə yazılmır. */
-const CACHE = 'jarvis-shell-v4';
+const CACHE = 'jarvis-shell-v5';
 const SHELL = [
   './',
   './index.html',
@@ -13,7 +13,9 @@ const SHELL = [
   './assets/js/llm.js',
   './assets/js/tools.js',
   './assets/js/voice.js',
-  './assets/js/ui.js'
+  './assets/js/ui.js',
+  './assets/js/commands.js',
+  './assets/js/drive.js'
 ];
 
 self.addEventListener('install', (event) => {
