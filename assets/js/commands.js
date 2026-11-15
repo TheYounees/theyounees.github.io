@@ -23,7 +23,32 @@ function detectNavApp(n) {
   return '';
 }
 
-function extractDestination(n) {
+const STOPWORDS = new Set([
+  'və', 've', 'ilə', 'ile', 'ə', 'e', 'də', 'de', 'da', 'ki', 'kimi', 'kadar', 'qədər', 'qeder',
+  'aç', 'ac', 'göstər', 'goster', 'qur', 'başlat', 'baslat', 'gir', 'necə', 'nece', 'hardan',
+  'gedim', 'gedək', 'gedek', 'getmək', 'getmek', 'çatmaq', 'catmaq', 'gedən', 'geden', 'gedir',
+  'yolu', 'yolunu', 'yolda', 'yol', 'marşrutu', 'marşrutunu', 'marşrut', 'navigasiyanı', 'navigasiya',
+  'waze', 'veys', 'yandex', 'navi', 'google', 'maps', 'xəritə', 'xerite', 'proqramında', 'proqramına'
+]);
+
+/** Mənzili orijinal yazılışda saxlayır (Azərbaycan hərfləri ilə). */
+function extractDestination(raw) {
+  const words = String(raw)
+    .toLowerCase()
+    .replace(/['’`]/g, ' ')
+    .replace(/[!?.,:;()]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((w) => !STOPWORDS.has(w))
+    .filter((w) => !/^(waze|veys|yandex|xerite|xəritə|maps|navi|google)/.test(w));
+  if (!words.length) return '';
+  // "bravo marketə" / "bravo marketdən" → "bravo market"
+  const last = words[words.length - 1].replace(/(dən|den|dan|də|de|yə|ye|ə|e)$/, '');
+  if (last) words[words.length - 1] = last;
+  return words.join(' ').trim();
+}
+
+function legacyExtractDestination(n) {
   let d = n
     .replace(/\b(waze\w*|veys\w*|yandex\w*|navi|google maps|google|xerite\w*|maps)\b/g, ' ')
     .replace(/\b(yolu|yolunu|yolda|yol|marsrutu|marsrutunu|marsrut|navigasiyani|navigasiya)\b/g, ' ')
@@ -60,7 +85,7 @@ export function parseLocalCommand(text, ctx = {}) {
   const wantsOpen = /(^|\s)(ac|goster|qur|baslat)(\s|$)/.test(n);
   const navWords = /(yol|marsrut|navigasiya|gedim|gedek|getmek|catmaq)/.test(n);
   if (wantsOpen && (navApp || navWords) && !/^(xeriteni|xerite|waze|veys|yandex)\s+ac$/.test(n)) {
-    const dest = extractDestination(n);
+    const dest = extractDestination(text);
     if (dest) return { type: 'navigate', target: dest, app: navApp };
     if (navApp) return { type: 'open_app', target: navApp };
   }
