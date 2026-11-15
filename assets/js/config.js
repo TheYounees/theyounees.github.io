@@ -133,5 +133,5 @@ export function providerConfig(settings) {
   const base = PROVIDERS[settings.provider] || PROVIDERS.custom;
   const baseUrl = (settings.baseUrl || base.baseUrl || '').replace(/\/+$/, '');
   const model = settings.model || base.model;
-  return { ...base, baseUrl, model, id: settings.provider };
+  return { ...base, baseUrl, model, fallbacks: settings.fallbacks || base.fallbacks, id: settings.provider };
 }

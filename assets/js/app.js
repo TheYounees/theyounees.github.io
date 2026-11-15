@@ -302,7 +302,7 @@ async function send(text) {
 
     const provider = activeProvider();
     const reqSettings = imageData && provider.visionModel
-      ? { ...settings, model: provider.visionModel }
+      ? { ...settings, model: provider.visionModel, fallbacks: provider.visionModels || [] }
       : settings;
 
     const result = await runWithFailover(reqSettings, messages);
@@ -555,7 +555,7 @@ function handleFile(file) {
     ui.toast('Yalnız şəkil faylları əlavə olunur.', 'err');
     return;
   }
-  const limitMb = activeProvider().visionModel ? 3.5 : 6;
+  const limitMb = activeProvider().visionModel ? 2.5 : 6;
   if (file.size > limitMb * 1024 * 1024) {
     ui.toast(`Şəkil çox böyükdür (maksimum ${limitMb} MB).`, 'err');
     return;
