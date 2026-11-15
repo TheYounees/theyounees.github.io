@@ -4,6 +4,7 @@ import { store } from './store.js';
 import { formatAzDate, formatAzTime } from './config.js';
 
 const LAST_APP_KEY = 'jarvis.lastApp';
+const LAST_NAV_KEY = 'jarvis.lastNav';
 
 /** Son açılan tətbiq — "yenə aç" kimi əmrlər üçün. */
 export function getLastApp() {
@@ -11,6 +12,19 @@ export function getLastApp() {
     const raw = localStorage.getItem(LAST_APP_KEY);
     return raw ? String(JSON.parse(raw).label || '') : '';
   } catch { return ''; }
+}
+
+export function getLastNav() {
+  try {
+    const raw = localStorage.getItem(LAST_NAV_KEY);
+    return raw ? String(JSON.parse(raw).target || '') : '';
+  } catch { return ''; }
+}
+
+function rememberNav(target, app) {
+  try {
+    localStorage.setItem(LAST_NAV_KEY, JSON.stringify({ target: String(target || ''), app: String(app || '') }));
+  } catch { /* yaddaş yoxdur */ }
 }
 
 function rememberApp(label, query) {
@@ -692,6 +706,7 @@ async function deviceAction(args) {
       if (has('navigate')) {
         try {
           if (bridge.navigate(destination, navApp)) {
+            rememberNav(destination, navApp);
             return ok({ message: `${navApp || 'Xəritə'} açıldı — ${destination} istiqamətində yol göstərilir.` });
           }
         } catch { /* brauzerə keç */ }

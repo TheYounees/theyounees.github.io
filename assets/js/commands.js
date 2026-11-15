@@ -25,7 +25,7 @@ function detectNavApp(n) {
 
 const STOPWORDS = new Set([
   'və', 've', 'ilə', 'ile', 'ə', 'e', 'də', 'de', 'da', 'ki', 'kimi', 'kadar', 'qədər', 'qeder',
-  'aç', 'ac', 'göstər', 'goster', 'qur', 'başlat', 'baslat', 'gir', 'necə', 'nece', 'hardan',
+  'aç', 'ac', 'göstər', 'goster', 'qur', 'başlat', 'baslat', 'gir', 'et', 'elə', 'ele', 'necə', 'nece', 'hardan',
   'gedim', 'gedək', 'gedek', 'getmək', 'getmek', 'çatmaq', 'catmaq', 'gedən', 'geden', 'gedir',
   'yolu', 'yolunu', 'yolda', 'yol', 'marşrutu', 'marşrutunu', 'marşrut', 'navigasiyanı', 'navigasiya',
   'waze', 'veys', 'yandex', 'navi', 'google', 'maps', 'xəritə', 'xerite', 'proqramında', 'proqramına'
@@ -82,12 +82,20 @@ export function parseLocalCommand(text, ctx = {}) {
   }
 
   const navApp = detectNavApp(n);
-  const wantsOpen = /(^|\s)(ac|goster|qur|baslat)(\s|$)/.test(n);
+  const wantsOpen = /(^|\s)(ac|goster|qur|baslat|et|ele)(\s|$)/.test(n);
   const navWords = /(yol|marsrut|navigasiya|gedim|gedek|getmek|catmaq)/.test(n);
   if (wantsOpen && (navApp || navWords) && !/^(xeriteni|xerite|waze|veys|yandex)\s+ac$/.test(n)) {
-    const dest = extractDestination(text);
+    let dest = extractDestination(text);
+    // "bunu / onu google xəritədə aç" — əvvəlki mənzili yeni proqramda göstər.
+    if (!dest || /^(bunu|onu|bura|bunu\s+)/.test(dest)) {
+      if (ctx.lastNav) dest = ctx.lastNav;
+    }
     if (dest) return { type: 'navigate', target: dest, app: navApp };
     if (navApp) return { type: 'open_app', target: navApp };
+  }
+
+  if (/^(bunu|onu)\b/.test(n) && /(xerite|maps|xeritede|xeritede)/.test(n) && ctx.lastNav) {
+    return { type: 'navigate', target: ctx.lastNav, app: detectNavApp(n) || 'google' };
   }
 
   const m = n.match(/^(.*?)\s*(?:ac|gir)$/);

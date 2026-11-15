@@ -585,6 +585,21 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void openAssistantSettings() {
+            try {
+                Intent i = new Intent("android.settings.VOICE_INPUT_SETTINGS");
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Exception e) {
+                try {
+                    Intent i = new Intent(Settings.ACTION_SETTINGS);
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                } catch (Exception ignored) {}
+            }
+        }
+
+        @JavascriptInterface
         public boolean isDefaultAssistant() {
             try {
                 if (Build.VERSION.SDK_INT >= 29) {

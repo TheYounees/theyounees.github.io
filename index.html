@@ -190,6 +190,7 @@
         <button class="btn small" id="btn-perms" type="button">İcazələri ver</button>
         <button class="btn small" id="btn-assistant" type="button">Rəqəmsal asistan et</button>
         <button class="btn small ghost" id="btn-overlay" type="button">Üst qat icazəsi</button>
+        <button class="btn small ghost" id="btn-assistant-settings" type="button">Asistan ayarları</button>
       </div>
       <p class="hint" id="assistant-status">Yoxlanılır…</p>
       <p class="hint">Asistan edildikdən sonra telefonun “Varsayılan dijital asistan” siyahısında JARVIS görünəcək. Bəzi telefonlarda əlavə olaraq “Üst qat icazəsi” lazımdır ki, arxa planda “Jarvis” deyəndə tətbiq özü açılsın.</p>
@@ -207,9 +208,24 @@
 
       <div class="btn-row end">
         <button class="btn" id="settings-cancel">Ləğv et</button>
+        <button class="btn ghost" id="btn-logout" type="button">Çıxış</button>
         <button class="btn primary" id="settings-save">Yadda saxla</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Giriş -->
+<div class="overlay" id="auth-gate" hidden>
+  <div class="panel modal intro">
+    <div class="intro-orb" aria-hidden="true"></div>
+    <h2>JARVIS girişi</h2>
+    <p class="lead">Davam etmək üçün istifadəçi adı və şifrə lazımdır.</p>
+    <div class="field"><label for="auth-user">İstifadəçi adı</label><input id="auth-user" type="text" autocomplete="username" spellcheck="false" /></div>
+    <div class="field"><label for="auth-pass">Şifrə</label><input id="auth-pass" type="password" autocomplete="current-password" /></div>
+    <p class="hint" id="auth-error" hidden>İstifadəçi adı və ya şifrə yanlışdır.</p>
+    <button class="btn primary wide" id="auth-go" type="button">Daxil ol</button>
+    <p class="hint center">Bu cihazda bir dəfə daxil olmaq kifayətdir.</p>
   </div>
 </div>
 

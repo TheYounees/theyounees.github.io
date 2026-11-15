@@ -4,10 +4,54 @@ import { store } from './store.js';
 import { ui, $ } from './ui.js';
 import { voice } from './voice.js';
 import { PROVIDERS, providerConfig } from './config.js';
-import { TOOL_DEFS, executeTool, getLastApp } from './tools.js';
+import { TOOL_DEFS, executeTool, getLastApp, getLastNav } from './tools.js';
 import { parseLocalCommand } from './commands.js';
 import { buildSystemPrompt, runTurn, fetchModels, pickModel } from './llm.js';
 import { drive } from './drive.js';
+
+/* ---------------- giriş (parol hash-i ilə) ---------------- */
+const AUTH_KEY = 'jarvis.auth';
+const AUTH_USER = 'yunis';
+const AUTH_HASH = '76120065841f13bd1447afec7546a763e02ada889ee539ea0fb278bcc4b47251';
+
+function isAuthed() {
+  try { return localStorage.getItem(AUTH_KEY) === AUTH_HASH; } catch { return false; }
+}
+
+async function sha256Hex(text) {
+  const data = new TextEncoder().encode(text);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function showAuthGate() {
+  const gate = $('#auth-gate');
+  gate.hidden = false;
+  const user = $('#auth-user');
+  const pass = $('#auth-pass');
+  const err = $('#auth-error');
+  const go = $('#auth-go');
+  if (user.value) pass.focus(); else user.focus();
+  const submit = async () => {
+    go.disabled = true;
+    try {
+      const hash = await sha256Hex(`${user.value.trim()}:${pass.value}`);
+      if (user.value.trim() === AUTH_USER && hash === AUTH_HASH) {
+        localStorage.setItem(AUTH_KEY, AUTH_HASH);
+        gate.hidden = true;
+        location.reload();
+        return;
+      }
+      err.hidden = false;
+      pass.value = '';
+      pass.focus();
+    } finally {
+      go.disabled = false;
+    }
+  };
+  go.addEventListener('click', submit);
+  pass.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+}
 
 function nativeBridge() {
   try { return window.JarvisNative?.available?.() ? window.JarvisNative : null; } catch { return null; }
@@ -74,10 +118,16 @@ function init() {
   voice.initVoices();
   // Telefon yaddaşındaki ehtiyat nüsxə: ad və açar bir dəfə soruşulsun.
   const nat = nativeBridge();
-  if (nat?.loadPrefs && !store.state.onboarded) {
+  if (nat?.loadPrefs) {
     try {
       const raw = nat.loadPrefs();
-      if (raw) store.replaceState(JSON.parse(raw));
+      if (raw) {
+        const backup = JSON.parse(raw);
+        const localTs = Number(store.state.updatedAt || 0);
+        const backupTs = Number(backup?.updatedAt || 0);
+        const empty = !localStorage.getItem('jarvis.state.v2');
+        if (empty || !store.state.onboarded || backupTs > localTs) store.replaceState(backup);
+      }
     } catch { /* nüsxə yoxdur */ }
   }
   drive.setClientId(store.state.settings.driveClientId || '');
@@ -403,7 +453,7 @@ const NO_KEY_MESSAGE =
 
 /** Fənər, saat, tətbiq açma və naviqasiya kimi əmrləri modelə göndərmədən dərhal icra edir. */
 async function tryLocalCommand(text) {
-  const cmd = parseLocalCommand(text, { lastApp: getLastApp() });
+  const cmd = parseLocalCommand(text, { lastApp: getLastApp(), lastNav: getLastNav() });
   if (!cmd) return null;
 
   if (cmd.type === 'repeat_missing') {
@@ -836,13 +886,36 @@ function bindEvents() {
     const nb = nativeBridge();
     if (!nb?.requestPermissionsNow) { ui.toast('İcazələr yalnız APK-da idarə olunur.', 'err'); return; }
     nb.requestPermissionsNow();
-    setTimeout(refreshAssistantState, 900);
+    ui.toast('İcazə pəncərəsi açılır…');
+    setTimeout(() => {
+      refreshAssistantState();
+      try {
+        const p = JSON.parse(nb.permissionState() || '{}');
+        const missing = ['mic', 'camera', 'location', 'notifications'].filter((k) => p[k] === false);
+        ui.toast(missing.length ? 'Bəzi icazələr verilmədi: ' + missing.join(', ') : 'Bütün icazələr verilib ✓');
+      } catch { /* yoxdur */ }
+    }, 1200);
   });
   $('#btn-assistant')?.addEventListener('click', () => {
     const nb = nativeBridge();
     if (!nb?.requestAssistantRole) { ui.toast('Asistan rejimi yalnız APK-da mövcuddur.', 'err'); return; }
+    if (nb.isDefaultAssistant?.()) {
+      ui.toast('JARVIS artıq varsayılan asistandır ✓');
+      refreshAssistantState();
+      return;
+    }
     nb.requestAssistantRole();
-    setTimeout(refreshAssistantState, 1200);
+    ui.toast('Asistan seçimi açılır — JARVIS-i seçin.');
+    setTimeout(refreshAssistantState, 1500);
+  });
+  $('#btn-assistant-settings')?.addEventListener('click', () => {
+    const nb = nativeBridge();
+    if (!nb?.openAssistantSettings) { ui.toast('Bu ayar yalnız APK-da mövcuddur.', 'err'); return; }
+    nb.openAssistantSettings();
+  });
+  $('#btn-logout')?.addEventListener('click', () => {
+    try { localStorage.removeItem(AUTH_KEY); } catch { /* yoxdur */ }
+    location.reload();
   });
   $('#btn-overlay')?.addEventListener('click', () => {
     const nb = nativeBridge();

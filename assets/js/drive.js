@@ -9,8 +9,8 @@ const CLIENT_KEY = 'jarvis.drive.clientId';
 const SECRET_KEY = 'jarvis.drive.clientSecret';
 const STATE_KEY = 'jarvis.drive.state';
 const VERIFIER_KEY = 'jarvis.drive.verifier';
-const FILE_NAME = 'jarvis.state.v2.json';
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+const FILE_NAME = 'JARVIS-yaddas.json';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
 function base64Url(buf) {
   let str = '';
@@ -282,7 +282,7 @@ export class DriveSync {
     if (this.fileId) return this.fileId;
     const headers = await this.authHeaders();
     const q = encodeURIComponent(`name='${FILE_NAME}' and trashed=false`);
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime)&pageSize=1`, { headers });
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&pageSize=1`, { headers });
     if (!res.ok) throw new Error(await driveError(res, 'Drive fayl siyahısı alınmadı'));
     const data = await res.json();
     const f = (data.files || [])[0];
@@ -302,7 +302,7 @@ export class DriveSync {
 
   async upload(state) {
     const headers = await this.authHeaders();
-    const body = JSON.stringify({ ...state, _driveUpdatedAt: Date.now() });
+    const body = JSON.stringify({ ...state, _driveUpdatedAt: Date.now() }, null, 2);
     const id = await this.findFile();
     if (id) {
       const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, {
@@ -314,7 +314,7 @@ export class DriveSync {
       return id;
     }
     // create
-    const metadata = { name: FILE_NAME, parents: ['appDataFolder'] };
+    const metadata = { name: FILE_NAME, mimeType: 'application/json', description: 'JARVIS yaddaşı — söhbətlər, profil və qeydlər.' };
     const boundary = 'jarvis_boundary_' + Math.random().toString(36).slice(2);
     const multipart = [
       `--${boundary}`,
