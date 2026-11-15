@@ -115,6 +115,20 @@ function appLink(app, query) {
   return found;
 }
 
+/** Play Store axtarışını düzgün adla aparmaq üçün kiçik xəritə. */
+const PLAY_NAMES = {
+  whatsapp: 'WhatsApp', vatsap: 'WhatsApp', 'whats app': 'WhatsApp',
+  pubg: 'PUBG MOBILE', 'pubg mobile': 'PUBG MOBILE',
+  tiktok: 'TikTok', insta: 'Instagram', instagram: 'Instagram',
+  telegram: 'Telegram', waze: 'Waze', yandex: 'Yandex Navi',
+  viber: 'Viber', signal: 'Signal', discord: 'Discord'
+};
+
+function playQuery(name) {
+  const key = String(name || '').toLowerCase().trim();
+  return PLAY_NAMES[key] || String(name || '').trim();
+}
+
 /* ---------------- hava ---------------- */
 
 async function getWeather(city) {
@@ -500,15 +514,24 @@ async function deviceAction(args) {
     }
 
     case 'open_app': {
+      if (has('openAppSmart')) {
+        try {
+          const raw = bridge.openAppSmart(target);
+          const res = raw ? JSON.parse(raw) : {};
+          if (res.ok) return ok({ message: `${res.label || target} açıldı.` });
+          if (res.reason === 'empty') return fail('Hansı tətbiqi açım?');
+        } catch { /* köhnə körpü — aşağıdakı üsula keç */ }
+      }
       if (has('openApp')) {
         try {
           if (bridge.openApp(target)) return ok({ message: `${target} açıldı.` });
         } catch { /* brauzerə keç */ }
         // Native mühitdə tətbiq tapılmadı — Google axtarışı yox, Play Store.
-        const play = `https://play.google.com/store/search?q=${encodeURIComponent(target)}&c=apps`;
+        const query = playQuery(target);
+        const play = `https://play.google.com/store/search?q=${encodeURIComponent(query)}&c=apps`;
         return ok({
-          message: `${target} quraşdırılmayıb və ya tapılmadı. Play Store-da axtar.`,
-          action: { href: play, label: `${target} — Play Store` }
+          message: `«${target}» quraşdırılmış tətbiqlər arasında tapılmadı. Play Store-da «${query}» axtarılır.`,
+          action: { href: play, label: `${query} — Play Store` }
         });
       }
       const link = appLink(target, message);

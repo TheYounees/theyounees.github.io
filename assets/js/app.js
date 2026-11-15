@@ -68,6 +68,7 @@ function init() {
 
   voice.initVoices();
   drive.setClientId(store.state.settings.driveClientId || '');
+  drive.setClientSecret(store.state.settings.driveClientSecret || '');
   ui.fillProfileFields(store.state.profile);
   ui.renderMemory(store.state);
   renderChats();
@@ -654,6 +655,7 @@ function saveSettings() {
     baseUrl: $('#st-base').value.trim(),
     searchKey: $('#st-search').value.trim(),
     driveClientId: $('#st-drive-client').value.trim(),
+    driveClientSecret: $('#st-drive-secret').value.trim(),
     speak: $('#st-speak').checked,
     wakeWord: $('#st-wake').checked,
     rate: Number($('#st-rate').value),
@@ -664,6 +666,7 @@ function saveSettings() {
   ui.setMuteState(!store.state.settings.speak);
   ui.setWakeState(Boolean(store.state.settings.wakeWord));
   drive.setClientId(store.state.settings.driveClientId);
+  drive.setClientSecret(store.state.settings.driveClientSecret);
   ui.closeSettings();
   ui.setStatus(modeLabel());
   refreshKeyChip();
@@ -774,9 +777,12 @@ function bindEvents() {
 
   $('#st-drive-connect').addEventListener('click', async () => {
     const cid = $('#st-drive-client').value.trim();
+    const secret = $('#st-drive-secret').value.trim();
     if (!cid) { ui.toast('Əvvəlcə Client ID daxil edin.', 'err'); return; }
+    if (!secret) { ui.toast('Client secret də lazımdır (Google PKCE-də də tələb edir).', 'err'); return; }
     drive.setClientId(cid);
-    store.setSettings({ driveClientId: cid });
+    drive.setClientSecret(secret);
+    store.setSettings({ driveClientId: cid, driveClientSecret: secret });
     try { await drive.connect(); } catch (err) { ui.toast(err.message || 'Bağlantı alınmadı.', 'err'); }
   });
   $('#st-drive-disconnect').addEventListener('click', () => {

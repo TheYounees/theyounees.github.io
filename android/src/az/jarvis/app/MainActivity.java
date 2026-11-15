@@ -370,15 +370,37 @@ public class MainActivity extends Activity {
         public boolean openApp(String name) {
             try {
                 String pkg = resolvePackage(name);
-                if (pkg == null) return false;
-                Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
-                if (i == null) return false;
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(i);
-                return true;
+                return pkg != null && launchPackage(pkg);
             } catch (Exception e) {
                 return false;
             }
+        }
+
+        /** Adı səlis uyğunlaşdırır: "pubg" → PUBG MOBILE, "vatsap" → WhatsApp və s. */
+        @JavascriptInterface
+        public String openAppSmart(String query) {
+            String q = query == null ? "" : query.trim();
+            if (q.isEmpty()) return "{\"ok\":false,\"reason\":\"empty\"}";
+            try {
+                String alias = aliasFor(q.toLowerCase().trim());
+                if (alias != null && launchPackage(alias)) {
+                    return appJson(true, alias, labelOf(alias));
+                }
+                java.util.List<String[]> apps = installedApps();
+                String[] labels = new String[apps.size()];
+                String[] pkgs = new String[apps.size()];
+                for (int i = 0; i < apps.size(); i++) {
+                    labels[i] = apps.get(i)[0];
+                    pkgs[i] = apps.get(i)[1];
+                }
+                int best = AppMatch.pick(q, labels, pkgs);
+                if (best >= 0 && launchPackage(pkgs[best])) {
+                    return appJson(true, pkgs[best], labels[best]);
+                }
+            } catch (Exception e) {
+                return "{\"ok\":false,\"reason\":\"error\"}";
+            }
+            return "{\"ok\":false,\"reason\":\"not_found\"}";
         }
 
         @JavascriptInterface
@@ -602,43 +624,73 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {}
     }
 
+    private String aliasFor(String key) {
+        return AppMatch.alias(key);
+    }
+
+    /** Quraşdırılmış (launcher-i olan) tətbiqlərin adları və paketləri. */
+    private java.util.List<String[]> installedApps() {
+        java.util.List<String[]> out = new java.util.ArrayList<>();
+        try {
+            android.content.pm.PackageManager pm = getPackageManager();
+            Intent main = new Intent(Intent.ACTION_MAIN);
+            main.addCategory(Intent.CATEGORY_LAUNCHER);
+            for (android.content.pm.ResolveInfo ri : pm.queryIntentActivities(main, 0)) {
+                if (ri.activityInfo == null) continue;
+                String pkg = ri.activityInfo.packageName;
+                if (pkg == null || pkg.equals(getPackageName())) continue;
+                String label = String.valueOf(ri.loadLabel(pm));
+                boolean dup = false;
+                for (String[] row : out) if (row[1].equals(pkg)) { dup = true; break; }
+                if (!dup) out.add(new String[]{label, pkg});
+            }
+        } catch (Exception ignored) {}
+        return out;
+    }
+
     private String resolvePackage(String name) {
         if (name == null) return null;
         String key = name.toLowerCase().trim();
         if (key.isEmpty()) return null;
         if (key.contains(".")) return key;
-        java.util.Map<String, String> map = new java.util.HashMap<>();
-        map.put("youtube", "com.google.android.youtube");
-        map.put("spotify", "com.spotify.music");
-        map.put("musiqi", "com.spotify.music");
-        map.put("musiq", "com.spotify.music");
-        map.put("music", "com.spotify.music");
-        map.put("whatsapp", "com.whatsapp");
-        map.put("telegram", "org.telegram.messenger");
-        map.put("instagram", "com.instagram.android");
-        map.put("maps", "com.google.android.apps.maps");
-        map.put("xəritə", "com.google.android.apps.maps");
-        map.put("xerite", "com.google.android.apps.maps");
-        map.put("chrome", "com.android.chrome");
-        map.put("camera", "com.android.camera");
-        map.put("kamera", "com.android.camera");
-        map.put("settings", "com.android.settings");
-        map.put("ayarlar", "com.android.settings");
-        map.put("gmail", "com.google.android.gm");
-        map.put("phone", "com.android.dialer");
-        map.put("zəng", "com.android.dialer");
-        map.put("messages", "com.google.android.apps.messaging");
-        map.put("sms", "com.google.android.apps.messaging");
-        if (map.containsKey(key)) return map.get(key);
-        // Quraşdırılmış tətbiqlər arasında adla axtarış.
+        String alias = aliasFor(key);
+        if (alias != null) return alias;
+        java.util.List<String[]> apps = installedApps();
+        String[] labels = new String[apps.size()];
+        String[] pkgs = new String[apps.size()];
+        for (int i = 0; i < apps.size(); i++) {
+            labels[i] = apps.get(i)[0];
+            pkgs[i] = apps.get(i)[1];
+        }
+        int best = AppMatch.pick(key, labels, pkgs);
+        if (best >= 0) return pkgs[best];
+        return null;
+    }
+
+    private String labelOf(String pkg) {
         try {
             android.content.pm.PackageManager pm = getPackageManager();
-            for (android.content.pm.ApplicationInfo app : pm.getInstalledApplications(0)) {
-                String label = String.valueOf(pm.getApplicationLabel(app)).toLowerCase();
-                if (label.contains(key)) return app.packageName;
-            }
-        } catch (Exception ignored) {}
-        return key;
+            return String.valueOf(pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)));
+        } catch (Exception e) {
+            return pkg;
+        }
+    }
+
+    private static String appJson(boolean ok, String pkg, String label) {
+        String l = label == null ? "" : label.replace("\\", " ").replace("\"", "'");
+        return "{\"ok\":" + ok + ",\"package\":\"" + pkg + "\",\"label\":\"" + l + "\"}";
+    }
+
+    private boolean launchPackage(String pkg) {
+        try {
+            Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
+            if (i == null) return false;
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private void pendingSpeed(float rate, float pitch) {

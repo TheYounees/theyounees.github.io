@@ -89,6 +89,7 @@ export const DEFAULT_SETTINGS = {
   historyLimit: 16,
   tokenBudget: 6000,
   driveClientId: '',
+  driveClientSecret: '',
   driveSync: false
 };
 

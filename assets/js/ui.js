@@ -433,6 +433,7 @@ class UI {
     $('#st-base').value = settings.baseUrl || '';
     $('#st-search').value = settings.searchKey || '';
     $('#st-drive-client').value = settings.driveClientId || '';
+    $('#st-drive-secret').value = settings.driveClientSecret || '';
     $('#st-speak').checked = Boolean(settings.speak);
     $('#st-wake').checked = Boolean(settings.wakeWord);
     $('#st-rate').value = settings.rate;

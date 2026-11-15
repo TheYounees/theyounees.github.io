@@ -74,6 +74,7 @@ R8-in real faydası: dex 11% kiçildi, köməkçi siniflər obfuscate olundu (`M
 
 ### Versiya tarixçəsi
 
+- **2.7** (versionCode 18) — Tətbiq açma tam yenidən yazıldı: `QUERY_ALL_PACKAGES` + launcher sorğusu ilə bütün quraşdırılmış tətbiqlər görünür; `AppMatch` səlis uyğunlaşdırma ("pubg" → PUBG MOBILE, "vatsap" → WhatsApp). Google OAuth üçün **client secret** sahəsi əlavə edildi (Google PKCE-də də tələb edir) və xəta mesajları Azərbaycan dilinə çevrildi.
 - **2.6** (versionCode 17) — Google Drive OAuth xarici brauzerdə tamamlanır və `azjarvis://oauth` deep link ilə tətbiqə qayıdır (NXDOMAIN problemi həll olundu); yerli konum (GPS/şəbəkə) və `navigate` əmri (Waze, Yandex Navi, Google Maps); model markdown düymə yaratmır; tətbiq açma dərhal icra olunur.
 - **2.5** (versionCode 16) — “X aç / X-ə gir” əmri native mühitdə dərhal icra olunur (modelə getmədən, əlavə təsdiq istəmədən); quraşdırılmayan tətbiq üçün Google axtarışı əvəzinə Play Store göstərilir; model “düyməyə bas” demir.
 - **2.4** (versionCode 15) — Groq şəkil dəstəyi (qwen/qwen3.8-27b və Llama 4 vision modelləri); sürətli əmrlər düymələri işləyir; native telefon idarəetməsi (tətbiq açma, zəng, SMS, bildiriş, batareya, bufer, paylaşma, ayarlar, alarm); arxa plan oyanma xidməti möhkəmləndirildi (bildiriş icazəsi, mic yoxlaması).

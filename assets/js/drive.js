@@ -1,10 +1,12 @@
 /* Google Drive sinxronizasiyası (istəyə bağlı).
    İstifadəçi öz Google Cloud OAuth client ID-sini tənzimləmələrdə daxil edir.
-   OAuth PKCE ilə token alınır (client secret lazım deyil). Yaddaş Google Drive
+   OAuth PKCE + client secret ilə token alınır (Google secret-i PKCE-də də tələb edir).
+   Yaddaş Google Drive
    appDataFolder-də "jarvis.state.v2.json" faylında saxlanılır. */
 
 const TOKEN_KEY = 'jarvis.drive.token';
 const CLIENT_KEY = 'jarvis.drive.clientId';
+const SECRET_KEY = 'jarvis.drive.clientSecret';
 const STATE_KEY = 'jarvis.drive.state';
 const VERIFIER_KEY = 'jarvis.drive.verifier';
 const FILE_NAME = 'jarvis.state.v2.json';
@@ -28,10 +30,26 @@ async function sha256(text) {
   return crypto.subtle.digest('SHA-256', data);
 }
 
+function tokenError(data) {
+  const code = String(data?.error || '');
+  const desc = String(data?.error_description || code || 'Token alınmadı.');
+  if (/client_secret/i.test(desc + ' ' + code)) {
+    return "Google client secret tələb edir. Tənzimləmələrdə «Client secret» xanasını doldurun: Google Console → Credentials → OAuth client → Client secret (GOCSPX-...).";
+  }
+  if (/redirect_uri/i.test(desc + ' ' + code)) {
+    return "Redirect URI uyğun deyil. Google Console → Authorized redirect URIs-ə " + 'https://theyounees.github.io/oauth-callback.html' + " əlavə edin.";
+  }
+  if (/invalid_grant/i.test(desc)) {
+    return "Kod vaxtı bitib və ya artıq istifadə olunub. Yenidən «Google Drive bağla»ya basın.";
+  }
+  return desc;
+}
+
 export class DriveSync {
   constructor() {
     this.token = this.loadToken();
     this.clientId = localStorage.getItem(CLIENT_KEY) || '';
+    this.clientSecret = localStorage.getItem(SECRET_KEY) || '';
     this.fileId = null;
     this.syncTimer = null;
     this.listeners = new Set();
@@ -41,6 +59,12 @@ export class DriveSync {
     this.clientId = String(id || '').trim();
     if (this.clientId) localStorage.setItem(CLIENT_KEY, this.clientId);
     else localStorage.removeItem(CLIENT_KEY);
+  }
+
+  setClientSecret(secret) {
+    this.clientSecret = String(secret || '').trim();
+    if (this.clientSecret) localStorage.setItem(SECRET_KEY, this.clientSecret);
+    else localStorage.removeItem(SECRET_KEY);
   }
 
   getClientId() { return this.clientId; }
@@ -144,20 +168,22 @@ export class DriveSync {
     if (!clientId) throw new Error('Client ID tapılmadı.');
 
     const redirectUri = this.redirectUri();
+    const body = new URLSearchParams({
+      client_id: clientId,
+      code,
+      code_verifier: verifier,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri
+    });
+    if (this.clientSecret) body.set('client_secret', this.clientSecret);
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: clientId,
-        code,
-        code_verifier: verifier,
-        grant_type: 'authorization_code',
-        redirect_uri: redirectUri
-      })
+      body
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.access_token) {
-      throw new Error(data.error_description || data.error || 'Token alınmadı.');
+      throw new Error(tokenError(data));
     }
     const token = {
       access_token: data.access_token,
@@ -201,14 +227,16 @@ export class DriveSync {
   async refreshToken() {
     if (!this.token?.refresh_token || !this.clientId) return false;
     try {
+      const body = new URLSearchParams({
+        client_id: this.clientId,
+        refresh_token: this.token.refresh_token,
+        grant_type: 'refresh_token'
+      });
+      if (this.clientSecret) body.set('client_secret', this.clientSecret);
       const res = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: this.clientId,
-          refresh_token: this.token.refresh_token,
-          grant_type: 'refresh_token'
-        })
+        body
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.access_token) return false;
