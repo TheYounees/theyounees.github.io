@@ -185,7 +185,7 @@ public class MainActivity extends Activity {
 
         requestAppPermissions();
         initTts();
-        web.loadUrl("https://" + HOST + "/index.html");
+        web.loadUrl("https://" + HOST + "/index.html?v=24");
     }
 
     private void requestAppPermissions() {
