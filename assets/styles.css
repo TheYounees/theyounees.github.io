@@ -706,7 +706,7 @@ body::before {
 .overlay[hidden] { display: none; }
 
 /* Giriş qapısı: ilk kadrdan görünür, authed olduqda gizlədilir. */
-#auth-gate { display: none; }
+#auth-gate { display: none; z-index: 95; }
 html:not(.authed) #auth-gate { display: grid; }
 html:not(.authed) .app { visibility: hidden; }
 

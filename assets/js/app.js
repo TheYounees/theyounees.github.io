@@ -11,20 +11,29 @@ import { drive } from './drive.js';
 
 /* ---------------- giriş (parol hash-i ilə) ---------------- */
 const AUTH_KEY = 'jarvis.auth';
+const AUTH_TOKEN = 'jv3-ok';
 const AUTH_USER = 'yunis';
-const AUTH_HASH = '76120065841f13bd1447afec7546a763e02ada889ee539ea0fb278bcc4b47251';
+const AUTH_PASS_HASH = '8188f95e28867900';
+
+/** WebView-da crypto.subtle olmasa da işləyən sadə hash (parol açıq saxlanmır). */
+function passHash(pass) {
+  const text = 'jarvis|' + String(pass) + '|v3';
+  let a = 0x811c9dc5;
+  let b = 0x1000193;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    a ^= c;
+    a = Math.imul(a, 16777619) >>> 0;
+    b = Math.imul(b ^ c, 2654435761) >>> 0;
+  }
+  return (a >>> 0).toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
+}
 
 function isAuthed() {
   try {
-    if (localStorage.getItem(AUTH_KEY) === AUTH_HASH) return true;
+    if (localStorage.getItem(AUTH_KEY) === AUTH_TOKEN) return true;
     return Boolean(window.JarvisNative?.isAuthedNative?.());
   } catch { return false; }
-}
-
-async function sha256Hex(text) {
-  const data = new TextEncoder().encode(text);
-  const buf = await crypto.subtle.digest('SHA-256', data);
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function showAuthGate() {
@@ -35,24 +44,29 @@ function showAuthGate() {
   const err = $('#auth-error');
   const go = $('#auth-go');
   if (user.value) pass.focus(); else user.focus();
-  const submit = async () => {
-    go.disabled = true;
-    try {
-      const hash = await sha256Hex(`${user.value.trim()}:${pass.value}`);
-      if (user.value.trim() === AUTH_USER && hash === AUTH_HASH) {
-        localStorage.setItem(AUTH_KEY, AUTH_HASH);
-        try { window.JarvisNative?.setAuth?.(true); } catch { /* yoxdur */ }
-        document.documentElement.classList.add('authed');
-        gate.hidden = true;
-        location.reload();
-        return;
-      }
+  const submit = () => {
+    const name = user.value.trim();
+    if (!name || !pass.value) {
+      err.textContent = 'İstifadəçi adı və şifrəni yazın.';
       err.hidden = false;
-      pass.value = '';
-      pass.focus();
-    } finally {
-      go.disabled = false;
+      return;
     }
+    go.disabled = true;
+    const okUser = name.toLowerCase() === AUTH_USER;
+    const okPass = passHash(pass.value) === AUTH_PASS_HASH;
+    if (okUser && okPass) {
+      try { localStorage.setItem(AUTH_KEY, AUTH_TOKEN); } catch { /* yoxdur */ }
+      try { window.JarvisNative?.setAuth?.(true); } catch { /* yoxdur */ }
+      document.documentElement.classList.add('authed');
+      gate.hidden = true;
+      location.reload();
+      return;
+    }
+    err.textContent = 'İstifadəçi adı və ya şifrə yanlışdır.';
+    err.hidden = false;
+    pass.value = '';
+    pass.focus();
+    go.disabled = false;
   };
   go.addEventListener('click', submit);
   pass.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
@@ -94,6 +108,12 @@ function needsKey() {
 /* ---------------- ilkin qurulum ---------------- */
 
 function init() {
+  if (!isAuthed()) {
+    document.documentElement.classList.remove('authed');
+    showAuthGate();
+    return;
+  }
+  document.documentElement.classList.add('authed');
   ui.boot();
   ui.levelProvider = () => voice.getLevel();
   ui.onQuickAction = (text) => {
@@ -153,16 +173,16 @@ function init() {
   // Köhnə versiyadan qalmış provayder adı artıq mövcud deyilsə — Gemini.
   if (!PROVIDERS[store.state.settings.provider]) store.setSettings({ provider: 'gemini', model: '' });
 
-  // Girişdən sonra API açarı soruşulmur — yalnız Tənzimləmələrdə.
-  if (!store.state.profile.name) store.setProfile({ name: 'Yunis' });
+  // Girişdən SONRA: ad və API açarı bir dəfə (tətbiqin içində).
   if (!store.state.onboarded) {
-    store.state.onboarded = true;
-    store.save();
-  }
-  ui.setStatus(modeLabel());
-  if (store.state.settings.wakeWord) startWake();
-  if (!store.state.settings.apiKey) {
-    ui.toast('AI üçün ☰ → Tənzimləmələr → API açarı əlavə edin.');
+    const ob = $('#onboarding');
+    if (ob) ob.hidden = false;
+    $('#ob-provider').value = store.state.settings.provider;
+    $('#ob-name').value = store.state.profile.name || '';
+    updateProviderHints('#ob-provider', '#ob-key', '#ob-hint');
+  } else {
+    ui.setStatus(modeLabel());
+    if (store.state.settings.wakeWord) startWake();
   }
 
   store.subscribe((type) => {

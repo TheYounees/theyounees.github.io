@@ -16,7 +16,7 @@
 <script>
   // Giriş vəziyyəti ilk kadrdan əvvəl müəyyən olunur — menyu görünüb sonra qapı açılmasın.
   try {
-    var authed = localStorage.getItem('jarvis.auth') === '76120065841f13bd1447afec7546a763e02ada889ee539ea0fb278bcc4b47251';
+    var authed = localStorage.getItem('jarvis.auth') === 'jv3-ok';
     if (!authed && window.JarvisNative && window.JarvisNative.isAuthedNative) {
       authed = window.JarvisNative.isAuthedNative();
     }
@@ -230,7 +230,7 @@
 </div>
 
 <!-- Giriş -->
-<div class="overlay" id="auth-gate">
+<div class="overlay" id="auth-gate" style="z-index:95">
   <div class="panel modal intro">
     <div class="intro-orb" aria-hidden="true"></div>
     <h2>JARVIS girişi</h2>
@@ -244,7 +244,7 @@
 </div>
 
 <!-- İlk quraşdırma -->
-<div class="overlay" id="onboarding">
+<div class="overlay" id="onboarding" hidden>
   <div class="panel modal intro">
     <div class="intro-orb" aria-hidden="true"></div>
     <h2>Salam. Mən JARVIS-əm.</h2>
