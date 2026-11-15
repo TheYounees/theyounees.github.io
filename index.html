@@ -13,6 +13,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="assets/styles.css" />
+<script>
+  // Giriş vəziyyəti ilk kadrdan əvvəl müəyyən olunur — menyu görünüb sonra qapı açılmasın.
+  try {
+    var authed = localStorage.getItem('jarvis.auth') === '76120065841f13bd1447afec7546a763e02ada889ee539ea0fb278bcc4b47251';
+    if (!authed && window.JarvisNative && window.JarvisNative.isAuthedNative) {
+      authed = window.JarvisNative.isAuthedNative();
+    }
+    if (authed) document.documentElement.classList.add('authed');
+  } catch (e) {}
+</script>
 </head>
 <body>
 <!-- Narahat olmayın: bu düymələr yuxarı sağ küncdə, kiçik ölçüdə görünür -->
@@ -202,6 +212,7 @@
       <p class="hint">Bu cihaz üçün redirect URI (Google Console-a əlavə edin): <code id="st-drive-redirect">…</code></p>
       <div class="btn-row">
         <button class="btn small" id="st-drive-connect" type="button">Google Drive bağla</button>
+        <button class="btn small" id="st-drive-sync" type="button">Sinxronlaşdır</button>
         <button class="btn small danger" id="st-drive-disconnect" type="button">Bağlantını kəs</button>
       </div>
       <p class="hint" id="st-drive-status">Google Drive qoşulmayıb.</p>
@@ -216,7 +227,7 @@
 </div>
 
 <!-- Giriş -->
-<div class="overlay" id="auth-gate" hidden>
+<div class="overlay" id="auth-gate">
   <div class="panel modal intro">
     <div class="intro-orb" aria-hidden="true"></div>
     <h2>JARVIS girişi</h2>

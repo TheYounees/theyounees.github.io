@@ -20,7 +20,10 @@ public class JarvisSession extends VoiceInteractionSession {
             i.setAction(Intent.ACTION_ASSIST);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             getContext().startActivity(i);
-        } catch (Exception ignored) {}
-        finish();
+            // Pəncərə açılsın, sonra sessiyanı bağlayırıq.
+            new android.os.Handler(getContext().getMainLooper()).postDelayed(this::finish, 500);
+        } catch (Exception ignored) {
+            finish();
+        }
     }
 }

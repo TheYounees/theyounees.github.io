@@ -700,8 +700,11 @@ async function deviceAction(args) {
     }
 
     case 'navigate': {
-      const destination = target || message;
-      if (!destination) return fail('Mənzil (ünvan) lazımdır.');
+      const destination = String(target || message || '').trim();
+      const junk = ['ne', 'nə', 'ha', 'hə', 'yox', 'bunu', 'onu', 'nese', 'nəsə', 'bu', 'o', '?...'];
+      if (!destination || destination.length < 2 || junk.includes(destination.toLowerCase())) {
+        return fail('Hansı ünvana yol göstərim? Mənzili deyin.');
+      }
       const navApp = target && message ? message : (args.app || '');
       if (has('navigate')) {
         try {

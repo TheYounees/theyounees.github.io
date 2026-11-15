@@ -705,6 +705,11 @@ body::before {
 }
 .overlay[hidden] { display: none; }
 
+/* Giriş qapısı: ilk kadrdan görünür, authed olduqda gizlədilir. */
+#auth-gate { display: none; }
+html:not(.authed) #auth-gate { display: grid; }
+html:not(.authed) .app { visibility: hidden; }
+
 .panel {
   width: 100%;
   max-width: 520px;

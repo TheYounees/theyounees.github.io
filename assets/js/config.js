@@ -39,22 +39,6 @@ export const PROVIDERS = {
     needsKey: true,
     vision: true
   },
-  openrouter: {
-    label: 'OpenRouter',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'google/gemini-3.8-flash',
-    keyHint: 'openrouter.ai/keys ünvanından açar götürün (bir çox model bir yerdə)',
-    needsKey: true,
-    vision: true
-  },
-  groq: {
-    label: 'Groq',
-    baseUrl: 'https://api.groq.com/openai/v1',
-    model: 'llama-3.3-70b-versatile',
-    keyHint: 'console.groq.com/keys ünvanından pulsuz açar götürün',
-    needsKey: true,
-    vision: false
-  },
   ollama: {
     label: 'Ollama (lokal)',
     baseUrl: 'http://localhost:11434/v1',

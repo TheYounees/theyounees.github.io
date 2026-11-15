@@ -619,6 +619,23 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {}
         }
 
+        /** Giriş vəziyyəti telefon yaddaşında saxlanılır — hər açılışda soruşulmasın. */
+        @JavascriptInterface
+        public void setAuth(boolean ok) {
+            try {
+                getSharedPreferences("jarvis_auth", MODE_PRIVATE).edit().putBoolean("ok", ok).apply();
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public boolean isAuthedNative() {
+            try {
+                return getSharedPreferences("jarvis_auth", MODE_PRIVATE).getBoolean("ok", false);
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
         /** Veb yaddaşının ehtiyat nüsxəsi (telefon yaddaşı). */
         @JavascriptInterface
         public void savePrefs(String json) {

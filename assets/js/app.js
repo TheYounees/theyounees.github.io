@@ -15,7 +15,10 @@ const AUTH_USER = 'yunis';
 const AUTH_HASH = '76120065841f13bd1447afec7546a763e02ada889ee539ea0fb278bcc4b47251';
 
 function isAuthed() {
-  try { return localStorage.getItem(AUTH_KEY) === AUTH_HASH; } catch { return false; }
+  try {
+    if (localStorage.getItem(AUTH_KEY) === AUTH_HASH) return true;
+    return Boolean(window.JarvisNative?.isAuthedNative?.());
+  } catch { return false; }
 }
 
 async function sha256Hex(text) {
@@ -38,6 +41,8 @@ function showAuthGate() {
       const hash = await sha256Hex(`${user.value.trim()}:${pass.value}`);
       if (user.value.trim() === AUTH_USER && hash === AUTH_HASH) {
         localStorage.setItem(AUTH_KEY, AUTH_HASH);
+        try { window.JarvisNative?.setAuth?.(true); } catch { /* yoxdur */ }
+        document.documentElement.classList.add('authed');
         gate.hidden = true;
         location.reload();
         return;
@@ -146,14 +151,16 @@ function init() {
   // Köhnə versiyadan qalmış provayder adı artıq mövcud deyilsə — Gemini.
   if (!PROVIDERS[store.state.settings.provider]) store.setSettings({ provider: 'gemini', model: '' });
 
+  // Girişdən sonra API açarı soruşulmur — yalnız Tənzimləmələrdə.
+  if (!store.state.profile.name) store.setProfile({ name: 'Yunis' });
   if (!store.state.onboarded) {
-    $('#onboarding').hidden = false;
-    $('#ob-provider').value = store.state.settings.provider;
-    $('#ob-name').value = store.state.profile.name || '';
-    updateProviderHints('#ob-provider', '#ob-key', '#ob-hint');
-  } else {
-    ui.setStatus(modeLabel());
-    if (store.state.settings.wakeWord) startWake();
+    store.state.onboarded = true;
+    store.save();
+  }
+  ui.setStatus(modeLabel());
+  if (store.state.settings.wakeWord) startWake();
+  if (!store.state.settings.apiKey) {
+    ui.toast('AI üçün ☰ → Tənzimləmələr → API açarı əlavə edin.');
   }
 
   store.subscribe((type) => {
@@ -171,9 +178,16 @@ function init() {
   // Sistem asistanı / oyanma sözü tətbiqi açanda birbaşa dinləməyə başla.
   window.__jarvisWake = () => {
     try {
-      const mic = document.querySelector('#btn-mic');
-      if (mic && !busy) mic.click();
-      else if (!busy) ui.toast('Buyurun — mikrofonu basın.');
+      if (busy) return;
+      const name = store.state.profile.name || 'Yunis';
+      const greeting = `Salam, ${name}. Buyurun, sizi dinləyirəm.`;
+      ui.setCoreState('speaking', 'Salamlayıram…');
+      voice.speak(greeting);
+      ui.addJarvisMessage(greeting);
+      setTimeout(() => {
+        const mic = document.querySelector('#btn-mic');
+        if (mic && !busy) mic.click();
+      }, 1500);
     } catch { /* yoxdur */ }
   };
 
@@ -876,6 +890,31 @@ function bindEvents() {
     store.setSettings({ driveClientId: cid, driveClientSecret: secret });
     try { await drive.connect(); } catch (err) { ui.toast(err.message || 'Bağlantı alınmadı.', 'err'); }
   });
+  $('#st-drive-sync')?.addEventListener('click', async () => {
+    if (!drive.isConnected()) { ui.toast('Əvvəlcə Google Drive bağlayın.', 'err'); return; }
+    const btn = $('#st-drive-sync');
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Sinxronlaşdırılır…';
+    try {
+      const merged = await drive.forcePull(store.state);
+      if (!merged) {
+        ui.toast('Drive-da JARVIS qovluğu/fayllar tapılmadı.');
+      } else {
+        store.replaceState(merged);
+        ui.fillProfileFields(store.state.profile);
+        ui.renderMemory(store.state);
+        renderChats();
+        ui.toast(`Drive-dan yükləndi: ${(merged.chats || []).length} söhbət, ${(merged.notes || []).length} qeyd.`);
+      }
+      refreshDriveStatus();
+    } catch (err) {
+      ui.toast(err.message || 'Sinxronizasiya alınmadı.', 'err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  });
   $('#st-drive-disconnect').addEventListener('click', () => {
     drive.disconnect();
     ui.toast('Google Drive bağlantısı kəsildi.');
@@ -915,6 +954,7 @@ function bindEvents() {
   });
   $('#btn-logout')?.addEventListener('click', () => {
     try { localStorage.removeItem(AUTH_KEY); } catch { /* yoxdur */ }
+    try { window.JarvisNative?.setAuth?.(false); } catch { /* yoxdur */ }
     location.reload();
   });
   $('#btn-overlay')?.addEventListener('click', () => {

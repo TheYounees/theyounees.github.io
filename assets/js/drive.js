@@ -9,7 +9,8 @@ const CLIENT_KEY = 'jarvis.drive.clientId';
 const SECRET_KEY = 'jarvis.drive.clientSecret';
 const STATE_KEY = 'jarvis.drive.state';
 const VERIFIER_KEY = 'jarvis.drive.verifier';
-const FILE_NAME = 'JARVIS-yaddas.json';
+const FOLDER_NAME = 'JARVIS';
+const FILES = { profile: 'profil.json', chats: 'sohbetler.json', settings: 'ayarlar.json', notes: 'qeydler.json' };
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
 function base64Url(buf) {
@@ -28,6 +29,23 @@ function randomString(len) {
 async function sha256(text) {
   const data = new TextEncoder().encode(text);
   return crypto.subtle.digest('SHA-256', data);
+}
+
+function mergeRemote(local, remote) {
+  const settings = { ...(local.settings || {}), ...(remote.settings || {}) };
+  // API açarı və client secret yalnız cihazda qalır.
+  settings.apiKey = local.settings?.apiKey || '';
+  settings.driveClientSecret = local.settings?.driveClientSecret || '';
+  return {
+    ...local,
+    profile: { ...(local.profile || {}), ...(remote.profile || {}) },
+    facts: (remote.facts && remote.facts.length) ? remote.facts : (local.facts || []),
+    notes: (remote.notes && remote.notes.length) ? remote.notes : (local.notes || []),
+    chats: (remote.chats && remote.chats.length) ? remote.chats : (local.chats || []),
+    activeChatId: remote.activeChatId || local.activeChatId,
+    settings,
+    updatedAt: Date.now()
+  };
 }
 
 async function driveError(res, prefix) {
@@ -65,7 +83,7 @@ export class DriveSync {
     this.token = this.loadToken();
     this.clientId = localStorage.getItem(CLIENT_KEY) || '';
     this.clientSecret = localStorage.getItem(SECRET_KEY) || '';
-    this.fileId = null;
+    this.folderId = null;
     this.syncTimer = null;
     this.listeners = new Set();
   }
@@ -123,7 +141,7 @@ export class DriveSync {
 
   clearToken() {
     this.token = null;
-    this.fileId = null;
+    this.folderId = null;
     try { localStorage.removeItem(TOKEN_KEY); } catch { /* yoxdur */ }
   }
 
@@ -278,44 +296,63 @@ export class DriveSync {
 
   /* ---------------- Drive API ---------------- */
 
-  async findFile() {
-    if (this.fileId) return this.fileId;
+  /** "JARVIS" qovluğu — bütün fayllar burada saxlanılır. */
+  async findFolder(create = true) {
+    if (this.folderId) return this.folderId;
     const headers = await this.authHeaders();
-    const q = encodeURIComponent(`name='${FILE_NAME}' and trashed=false`);
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&pageSize=1`, { headers });
-    if (!res.ok) throw new Error(await driveError(res, 'Drive fayl siyahısı alınmadı'));
-    const data = await res.json();
-    const f = (data.files || [])[0];
-    if (f) { this.fileId = f.id; return f.id; }
-    return null;
+    const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1`, { headers });
+    if (!res.ok) throw new Error(await driveError(res, 'Drive qovluğu oxunmadı'));
+    const data = await res.json().catch(() => ({}));
+    const found = (data.files || [])[0];
+    if (found) { this.folderId = found.id; return found.id; }
+    if (!create) return null;
+    const created = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+    });
+    const cdata = await created.json().catch(() => ({}));
+    if (!created.ok || !cdata.id) throw new Error(await driveError(created, 'Drive qovluğu yaradılmadı'));
+    this.folderId = cdata.id;
+    return cdata.id;
   }
 
-  async download() {
-    const id = await this.findFile();
+  async findFile(name, folderId) {
+    const headers = await this.authHeaders();
+    const q = encodeURIComponent(`name='${name}' and '${folderId}' in parents and trashed=false`);
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&pageSize=1`, { headers });
+    if (!res.ok) throw new Error(await driveError(res, 'Drive fayl siyahısı alınmadı'));
+    const data = await res.json().catch(() => ({}));
+    const f = (data.files || [])[0];
+    return f ? f.id : null;
+  }
+
+  async downloadNamed(name, folderId) {
+    const id = await this.findFile(name, folderId);
     if (!id) return null;
     const headers = await this.authHeaders();
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, { headers });
-    if (!res.ok) throw new Error('Drive faylı yüklənmədi (' + res.status + ').');
+    if (!res.ok) throw new Error(await driveError(res, `${name} yüklənmədi`));
     const text = await res.text();
     try { return JSON.parse(text); } catch { return null; }
   }
 
-  async upload(state) {
+  async uploadNamed(name, obj, folderId) {
     const headers = await this.authHeaders();
-    const body = JSON.stringify({ ...state, _driveUpdatedAt: Date.now() }, null, 2);
-    const id = await this.findFile();
+    const body = JSON.stringify(obj, null, 2);
+    const id = await this.findFile(name, folderId);
     if (id) {
       const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, {
         method: 'PATCH',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body
       });
-      if (!res.ok) throw new Error('Drive yenilənmədi (' + res.status + ').');
+      if (!res.ok) throw new Error(await driveError(res, `${name} yenilənmədi`));
       return id;
     }
-    // create
-    const metadata = { name: FILE_NAME, mimeType: 'application/json', description: 'JARVIS yaddaşı — söhbətlər, profil və qeydlər.' };
     const boundary = 'jarvis_boundary_' + Math.random().toString(36).slice(2);
+    const metadata = { name, mimeType: 'application/json', parents: [folderId], description: 'JARVIS yaddaşı' };
     const multipart = [
       `--${boundary}`,
       'Content-Type: application/json; charset=UTF-8',
@@ -333,9 +370,49 @@ export class DriveSync {
       body: multipart
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.id) throw new Error(data.error?.message || 'Drive faylı yaradılmadı (' + res.status + ').');
-    this.fileId = data.id;
+    if (!res.ok || !data.id) throw new Error(await driveError(res, `${name} yaradılmadı`));
     return data.id;
+  }
+
+  /** Bütün vəziyyəti 4 ayrı fayl kimi JARVIS qovluğuna yazır. */
+  async syncAll(state) {
+    const folder = await this.findFolder(true);
+    const settings = { ...state.settings };
+    delete settings.apiKey;
+    delete settings.driveClientSecret;
+    await this.uploadNamed(FILES.profile, { profile: state.profile, facts: state.facts || [] }, folder);
+    await this.uploadNamed(FILES.chats, { chats: state.chats || [], activeChatId: state.activeChatId || '' }, folder);
+    await this.uploadNamed(FILES.settings, { settings, timers: state.timers || [] }, folder);
+    await this.uploadNamed(FILES.notes, { notes: state.notes || [] }, folder);
+  }
+
+  /** Drive-dakı faylları oxuyur (bir fayl da olsa qaytarır). */
+  async pullAll() {
+    const folder = await this.findFolder(false);
+    if (!folder) return null;
+    const [profile, chats, settings, notes] = await Promise.all([
+      this.downloadNamed(FILES.profile, folder),
+      this.downloadNamed(FILES.chats, folder),
+      this.downloadNamed(FILES.settings, folder),
+      this.downloadNamed(FILES.notes, folder)
+    ]);
+    if (!profile && !chats && !settings && !notes) return null;
+    return {
+      profile: profile?.profile || null,
+      facts: profile?.facts || [],
+      chats: chats?.chats || [],
+      activeChatId: chats?.activeChatId || '',
+      settings: settings?.settings || null,
+      timers: settings?.timers || [],
+      notes: notes?.notes || []
+    };
+  }
+
+  /** İstifadəçi "Sinxronlaşdır" basanda Drive-dan məcburi oxuyur. */
+  async forcePull(localState) {
+    const remote = await this.pullAll();
+    if (!remote) return null;
+    return mergeRemote(localState, remote);
   }
 
   disconnect() {
@@ -350,7 +427,7 @@ export class DriveSync {
     if (this.syncTimer) clearTimeout(this.syncTimer);
     this.syncTimer = setTimeout(async () => {
       try {
-        await this.upload(state);
+        await this.syncAll(state);
         this.emit('synced', null);
       } catch (err) {
         this.emit('error', err.message || 'Sinxronizasiya alınmadı.');
@@ -361,23 +438,16 @@ export class DriveSync {
   async pullAndMerge(localState) {
     if (!this.isConnected()) return localState;
     try {
-      const remote = await this.download();
+      const remote = await this.pullAll();
       if (!remote) {
-        // uzaqda fayl yoxdur — lokalı yükləyirik
-        await this.upload(localState);
+        await this.syncAll(localState);
         this.emit('synced', null);
         return localState;
       }
-      const localTs = Number(localState?.updatedAt || localState?.createdAt || 0);
-      const remoteTs = Number(remote?._driveUpdatedAt || remote?.updatedAt || remote?.createdAt || 0);
-      if (remoteTs > localTs) {
-        this.emit('pulled', null);
-        return remote;
-      }
-      // lokal daha yenidir — uzağa yüklə
-      await this.upload(localState);
-      this.emit('synced', null);
-      return localState;
+      const merged = mergeRemote(localState, remote);
+      await this.syncAll(merged);
+      this.emit('pulled', null);
+      return merged;
     } catch (err) {
       this.emit('error', err.message || 'Drive-dan oxumaq alınmadı.');
       return localState;
