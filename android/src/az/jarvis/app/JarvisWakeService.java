@@ -44,7 +44,20 @@ public class JarvisWakeService extends Service {
             return START_NOT_STICKY;
         }
         running = true;
-        startForeground(NOTIF_ID, buildNotification());
+        try {
+            startForeground(NOTIF_ID, buildNotification());
+        } catch (Exception e) {
+            Log.w(TAG, "startForeground failed: " + e);
+            running = false;
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "RECORD_AUDIO not granted");
+            running = false;
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         startRecognition();
         return START_STICKY;
     }
@@ -176,9 +189,13 @@ public class JarvisWakeService extends Service {
     public static void setWakeEnabled(Context ctx, boolean enabled) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("wakeEnabled", enabled).apply();
         if (enabled) {
-            Intent i = new Intent(ctx, JarvisWakeService.class);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i);
-            else ctx.startService(i);
+            try {
+                Intent i = new Intent(ctx, JarvisWakeService.class);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i);
+                else ctx.startService(i);
+            } catch (Exception ignored) {
+                /* başlatma alınmadı */
+            }
         } else {
             ctx.stopService(new Intent(ctx, JarvisWakeService.class));
         }

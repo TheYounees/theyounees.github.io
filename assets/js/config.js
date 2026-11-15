@@ -16,7 +16,9 @@ export const PROVIDERS = {
     model: 'llama-3.3-70b-versatile',
     keyHint: 'console.groq.com/keys — pulsuz açar. 413/limit xətasında avtomatik yüngül modelə keçir.',
     needsKey: true,
-    vision: false,
+    vision: true,
+    visionModel: 'qwen/qwen3.8-27b',
+    visionModels: ['qwen/qwen3.8-27b', 'meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct'],
     fallbacks: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-20b']
   },
   openrouter: {

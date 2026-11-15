@@ -432,10 +432,12 @@ export const TOOL_DEFS = [
         properties: {
           action: {
             type: 'string',
-            enum: ['torch_on', 'torch_off', 'bluetooth', 'call', 'sms', 'open_app', 'music', 'notify', 'vibrate', 'clipboard_copy', 'location', 'battery', 'share']
+            enum: ['torch_on', 'torch_off', 'bluetooth', 'call', 'sms', 'open_app', 'music', 'notify', 'vibrate', 'clipboard_copy', 'location', 'battery', 'share', 'open_settings', 'alarm']
           },
-          target: { type: 'string', description: 'Nömrə, tətbiq adı, mətn və ya axtarış sözü' },
-          message: { type: 'string', description: 'SMS mətni və ya bildiriş mətni' }
+          target: { type: 'string', description: 'Nömrə, tətbiq adı, mətn, ayar adı (bluetooth, wifi, sound) və ya axtarış sözü' },
+          message: { type: 'string', description: 'SMS mətni və ya bildiriş mətni' },
+          hour: { type: 'number', description: 'Alarm saatı (0–23)' },
+          minute: { type: 'number', description: 'Alarm dəqiqəsi (0–59)' }
         },
         required: ['action'],
         additionalProperties: false
@@ -450,6 +452,8 @@ async function deviceAction(args) {
   const action = String(args.action || '').toLowerCase();
   const target = args.target ? String(args.target) : '';
   const message = args.message ? String(args.message) : '';
+  const bridge = nativeBridge();
+  const has = (m) => Boolean(bridge && typeof bridge[m] === 'function');
 
   switch (action) {
     case 'torch_on': return setTorch(true);
@@ -470,6 +474,10 @@ async function deviceAction(args) {
     case 'call': {
       const number = target.replace(/[^\d+]/g, '');
       if (!number) return fail('Zəng üçün nömrə lazımdır.');
+      if (has('dial')) {
+        try { bridge.dial(number); return ok({ message: `Zəng ekranı açıldı: ${number}` }); }
+        catch { /* brauzerə keç */ }
+      }
       return ok({
         message: 'Zəngi başlatmaq üçün düyməyə basın.',
         action: { href: `tel:${number}`, label: `Zəng et: ${number}` }
@@ -478,6 +486,10 @@ async function deviceAction(args) {
 
     case 'sms': {
       const number = target.replace(/[^\d+]/g, '');
+      if (has('sendSms')) {
+        try { bridge.sendSms(number, message); return ok({ message: number ? `SMS pəncərəsi açıldı: ${number}` : 'SMS pəncərəsi açıldı.' }); }
+        catch { /* brauzerə keç */ }
+      }
       const href = `sms:${number}${message ? `?&body=${encodeURIComponent(message)}` : ''}`;
       return ok({
         message: 'SMS pəncərəsini açmaq üçün düyməyə basın.',
@@ -486,6 +498,11 @@ async function deviceAction(args) {
     }
 
     case 'open_app': {
+      if (has('openApp')) {
+        try {
+          if (bridge.openApp(target)) return ok({ message: `${target} açıldı.` });
+        } catch { /* brauzerə keç */ }
+      }
       const link = appLink(target, message);
       return ok({
         message: `${link.label} açmaq üçün düyməyə basın.`,
@@ -495,6 +512,9 @@ async function deviceAction(args) {
 
     case 'music': {
       const query = target || message || '';
+      if (has('openApp') && !query) {
+        try { if (bridge.openApp('spotify')) return ok({ message: 'Spotify açıldı.' }); } catch { /* keç */ }
+      }
       const link = appLink(query ? 'spotify' : 'youtube', query);
       return ok({
         message: query ? `"${query}" üçün musiqi axtarışı hazırdır.` : 'Musiqi tətbiqi üçün keçid hazırdır.',
@@ -503,6 +523,10 @@ async function deviceAction(args) {
     }
 
     case 'notify': {
+      if (has('notify')) {
+        try { bridge.notify('JARVIS', message || target || 'Bildiriş'); return ok({ message: 'Bildiriş göndərildi.' }); }
+        catch { /* brauzerə keç */ }
+      }
       if (!('Notification' in window)) return fail('Bu brauzer bildirişləri dəstəkləmir.');
       let perm = Notification.permission;
       if (perm === 'default') perm = await Notification.requestPermission();
@@ -529,6 +553,10 @@ async function deviceAction(args) {
     case 'clipboard_copy': {
       const text = message || target;
       if (!text) return fail('Kopyalamaq üçün mətn lazımdır.');
+      if (has('clipboard')) {
+        try { bridge.clipboard(text); return ok({ message: 'Mətn buferə kopyalandı.' }); }
+        catch { /* brauzerə keç */ }
+      }
       try {
         await navigator.clipboard.writeText(text);
         return ok({ message: 'Mətn buferə kopyalandı.' });
@@ -557,6 +585,12 @@ async function deviceAction(args) {
     }
 
     case 'battery': {
+      if (has('battery')) {
+        try {
+          const info = JSON.parse(bridge.battery());
+          return ok({ səviyyə: info.level + '%', doldurulur: info.charging ? 'bəli' : 'xeyr' });
+        } catch { /* brauzerə keç */ }
+      }
       if (!navigator.getBattery) return fail('Batareya məlumatı bu brauzerdə əlçatan deyil.');
       const b = await navigator.getBattery();
       return ok({
@@ -566,6 +600,10 @@ async function deviceAction(args) {
     }
 
     case 'share': {
+      if (has('share')) {
+        try { bridge.share(message || target || 'JARVIS'); return ok({ message: 'Paylaşma pəncərəsi açıldı.' }); }
+        catch { /* brauzerə keç */ }
+      }
       if (!navigator.share) return fail('Paylaşma bu brauzerdə dəstəklənmir.');
       try {
         await navigator.share({ title: 'JARVIS', text: message || target || 'JARVIS' });
@@ -573,6 +611,25 @@ async function deviceAction(args) {
       } catch {
         return fail('Paylaşma ləğv edildi.');
       }
+    }
+
+    case 'open_settings': {
+      if (has('openSettings')) {
+        try { bridge.openSettings(target); return ok({ message: 'Ayarlar açıldı.' }); }
+        catch { /* keç */ }
+      }
+      return fail('Ayarları açmaq bu mühitdə mümkün deyil.');
+    }
+
+    case 'alarm': {
+      const hour = Number(args.hour);
+      const minute = Number(args.minute || 0);
+      if (!Number.isFinite(hour) || hour < 0 || hour > 23) return fail('Saat düzgün deyil (0–23).');
+      if (has('setAlarm')) {
+        try { bridge.setAlarm(hour, minute); return ok({ message: `Alarm quruldu: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}` }); }
+        catch { /* keç */ }
+      }
+      return fail('Alarm qurmaq bu mühitdə mümkün deyil.');
     }
 
     default:

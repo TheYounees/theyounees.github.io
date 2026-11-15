@@ -2,8 +2,18 @@ package az.jarvis.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.media.AudioManager;
+import android.os.BatteryManager;
+import android.provider.AlarmClock;
+import android.provider.Settings;
 import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
@@ -169,6 +179,10 @@ public class MainActivity extends Activity {
         }
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             wanted.add(Manifest.permission.CAMERA);
+        }
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            wanted.add(Manifest.permission.POST_NOTIFICATIONS);
         }
         if (wanted.isEmpty()) return;
         requestPermissions(wanted.toArray(new String[0]), REQ_PERMS);
@@ -337,6 +351,126 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean openApp(String name) {
+            try {
+                String pkg = resolvePackage(name);
+                if (pkg == null) return false;
+                Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
+                if (i == null) return false;
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public void dial(String number) {
+            try {
+                Intent i = new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + number));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void sendSms(String number, String message) {
+            try {
+                Intent i = new Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + number));
+                if (message != null && !message.isEmpty()) i.putExtra("sms_body", message);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void share(String text) {
+            try {
+                Intent i = new Intent(Intent.ACTION_SEND);
+                i.setType("text/plain");
+                i.putExtra(Intent.EXTRA_TEXT, text);
+                Intent chooser = Intent.createChooser(i, "Paylaş");
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(chooser);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void clipboard(String text) {
+            try {
+                ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("JARVIS", text));
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void notify(String title, String text) {
+            try {
+                NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                if (nm == null) return;
+                String chId = "jarvis_msg";
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    NotificationChannel ch = new NotificationChannel(chId, "JARVIS bildirişləri", NotificationManager.IMPORTANCE_DEFAULT);
+                    nm.createNotificationChannel(ch);
+                }
+                Notification.Builder b = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                        ? new Notification.Builder(MainActivity.this, chId)
+                        : new Notification.Builder(MainActivity.this);
+                b.setContentTitle(title == null ? "JARVIS" : title)
+                 .setContentText(text == null ? "" : text)
+                 .setSmallIcon(android.R.drawable.ic_dialog_info)
+                 .setAutoCancel(true);
+                nm.notify((int) (System.currentTimeMillis() % 100000), b.build());
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public String battery() {
+            try {
+                BatteryManager bm = (BatteryManager) getSystemService(BATTERY_SERVICE);
+                int level = bm != null ? bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) : -1;
+                Intent status = registerReceiver(null, new android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                int plugged = status != null ? status.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) : -1;
+                JSONObject o = new JSONObject();
+                o.put("level", level);
+                o.put("charging", plugged > 0);
+                return o.toString();
+            } catch (Exception e) {
+                return "{\"level\":-1,\"charging\":false}";
+            }
+        }
+
+        @JavascriptInterface
+        public void openSettings(String panel) {
+            try {
+                String key = panel == null ? "" : panel.toLowerCase();
+                String action = Settings.ACTION_SETTINGS;
+                if (key.contains("bluetooth")) action = Settings.ACTION_BLUETOOTH_SETTINGS;
+                else if (key.contains("wifi") || key.contains("wi-fi")) action = Settings.ACTION_WIFI_SETTINGS;
+                else if (key.contains("sound") || key.contains("səs")) action = Settings.ACTION_SOUND_SETTINGS;
+                else if (key.contains("display") || key.contains("ekran")) action = Settings.ACTION_DISPLAY_SETTINGS;
+                else if (key.contains("battery") || key.contains("batareya")) action = Intent.ACTION_POWER_USAGE_SUMMARY;
+                else if (key.contains("app") || key.contains("tətbiq")) action = Settings.ACTION_APPLICATION_SETTINGS;
+                Intent i = new Intent(action);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void setAlarm(int hour, int minute) {
+            try {
+                Intent i = new Intent(AlarmClock.ACTION_SET_ALARM);
+                i.putExtra(AlarmClock.EXTRA_HOUR, hour);
+                i.putExtra(AlarmClock.EXTRA_MINUTES, minute);
+                i.putExtra(AlarmClock.EXTRA_SKIP_UI, true);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
         public boolean hasMicPermission() {
             return checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
         }
@@ -345,6 +479,42 @@ public class MainActivity extends Activity {
         public void requestPermissionsNow() {
             runOnUiThread(MainActivity.this::requestAppPermissions);
         }
+    }
+
+    private String resolvePackage(String name) {
+        if (name == null) return null;
+        String key = name.toLowerCase().trim();
+        if (key.isEmpty()) return null;
+        if (key.contains(".")) return key;
+        java.util.Map<String, String> map = new java.util.HashMap<>();
+        map.put("youtube", "com.google.android.youtube");
+        map.put("spotify", "com.spotify.music");
+        map.put("whatsapp", "com.whatsapp");
+        map.put("telegram", "org.telegram.messenger");
+        map.put("instagram", "com.instagram.android");
+        map.put("maps", "com.google.android.apps.maps");
+        map.put("xəritə", "com.google.android.apps.maps");
+        map.put("xerite", "com.google.android.apps.maps");
+        map.put("chrome", "com.android.chrome");
+        map.put("camera", "com.android.camera");
+        map.put("kamera", "com.android.camera");
+        map.put("settings", "com.android.settings");
+        map.put("ayarlar", "com.android.settings");
+        map.put("gmail", "com.google.android.gm");
+        map.put("phone", "com.android.dialer");
+        map.put("zəng", "com.android.dialer");
+        map.put("messages", "com.google.android.apps.messaging");
+        map.put("sms", "com.google.android.apps.messaging");
+        if (map.containsKey(key)) return map.get(key);
+        // Quraşdırılmış tətbiqlər arasında adla axtarış.
+        try {
+            android.content.pm.PackageManager pm = getPackageManager();
+            for (android.content.pm.ApplicationInfo app : pm.getInstalledApplications(0)) {
+                String label = String.valueOf(pm.getApplicationLabel(app)).toLowerCase();
+                if (label.contains(key)) return app.packageName;
+            }
+        } catch (Exception ignored) {}
+        return key;
     }
 
     private void pendingSpeed(float rate, float pitch) {

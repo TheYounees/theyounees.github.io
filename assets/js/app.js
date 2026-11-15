@@ -42,6 +42,12 @@ function needsKey() {
 function init() {
   ui.boot();
   ui.levelProvider = () => voice.getLevel();
+  ui.onQuickAction = (text) => {
+    const input = $('#input');
+    input.value = '';
+    autoGrow(input);
+    send(text);
+  };
 
   voice.handlers = {
     language: 'az-AZ',
@@ -294,7 +300,12 @@ async function send(text) {
       { role: 'user', content: userContent }
     ];
 
-    const result = await runWithFailover(settings, messages);
+    const provider = activeProvider();
+    const reqSettings = imageData && provider.visionModel
+      ? { ...settings, model: provider.visionModel }
+      : settings;
+
+    const result = await runWithFailover(reqSettings, messages);
 
     deliver(result.text || 'Cavab formalaşmadı.', result.actions || []);
   } catch (err) {
@@ -544,13 +555,14 @@ function handleFile(file) {
     ui.toast('Yalnız şəkil faylları əlavə olunur.', 'err');
     return;
   }
-  if (file.size > 6 * 1024 * 1024) {
-    ui.toast('Şəkil çox böyükdür (maksimum 6 MB).', 'err');
+  const limitMb = activeProvider().visionModel ? 3.5 : 6;
+  if (file.size > limitMb * 1024 * 1024) {
+    ui.toast(`Şəkil çox böyükdür (maksimum ${limitMb} MB).`, 'err');
     return;
   }
 
   const provider = activeProvider();
-  if (!provider.vision) {
+  if (!provider.vision && !provider.visionModel) {
     ui.toast(`${provider.label} şəkil görməyi dəstəkləmir.`, 'err');
     return;
   }
