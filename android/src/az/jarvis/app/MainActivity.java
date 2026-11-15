@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.role.RoleManager;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ComponentName;
@@ -84,6 +85,7 @@ public class MainActivity extends Activity {
 
     private long lastLevelEmit = 0;
     private String pendingDriveUrl = null;
+    private boolean pendingWake = false;
     private LocationManager locationManager;
     private Location lastLocation;
     private boolean locationRequested = false;
@@ -129,6 +131,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 flushDriveUrl();
+                flushWake();
             }
 
             @Override
@@ -534,37 +537,105 @@ public class MainActivity extends Activity {
         public boolean navigate(String destination, String app) {
             try {
                 String dest = destination == null ? "" : destination.trim();
-                String a = app == null ? "" : app.toLowerCase();
-                if (a.contains("waze") && isPackageInstalled("com.waze")) {
-                    String q = "waze://?q=" + Uri.encode(dest) + (dest.isEmpty() ? "" : "&navigate=yes");
-                    Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(q));
-                    i.setPackage("com.waze");
-                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(i);
-                    return true;
+                if (dest.isEmpty()) return false;
+                String[] target = NavLinks.resolve(app, dest);
+                Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(target[0]));
+                if (target[1] != null && !target[1].isEmpty() && isPackageInstalled(target[1])) {
+                    i.setPackage(target[1]);
                 }
-                if (a.contains("yandex") && isPackageInstalled("ru.yandex.yandexnavi")) {
-                    Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse("yandexnavi://build_route_on_map?to=" + Uri.encode(dest)));
-                    i.setPackage("ru.yandex.yandexnavi");
-                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(i);
-                    return true;
-                }
-                Intent g = new Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=" + Uri.encode(dest)));
-                g.setPackage("com.google.android.apps.maps");
-                g.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 try {
-                    startActivity(g);
+                    startActivity(i);
                     return true;
-                } catch (Exception noMaps) {
-                    Intent geo = new Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(dest)));
-                    geo.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(geo);
+                } catch (Exception noApp) {
+                    // Tətbiq yoxdursa brauzer/xəritə versiyası
+                    Intent web = new Intent(Intent.ACTION_VIEW, Uri.parse(NavLinks.googleWeb(dest)));
+                    web.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(web);
                     return true;
                 }
             } catch (Exception e) {
                 return false;
             }
+        }
+
+        @JavascriptInterface
+        public boolean requestAssistantRole() {
+            try {
+                if (Build.VERSION.SDK_INT >= 29) {
+                    RoleManager rm = getSystemService(RoleManager.class);
+                    if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT)) {
+                        if (rm.isRoleHeld(RoleManager.ROLE_ASSISTANT)) return true;
+                        startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT), 2001);
+                        return true;
+                    }
+                }
+                Intent i = new Intent("android.settings.VOICE_INPUT_SETTINGS");
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+                return true;
+            } catch (Exception e) {
+                try {
+                    Intent i = new Intent(Settings.ACTION_SETTINGS);
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                    return true;
+                } catch (Exception ignored) { return false; }
+            }
+        }
+
+        @JavascriptInterface
+        public boolean isDefaultAssistant() {
+            try {
+                if (Build.VERSION.SDK_INT >= 29) {
+                    RoleManager rm = getSystemService(RoleManager.class);
+                    return rm != null && rm.isRoleHeld(RoleManager.ROLE_ASSISTANT);
+                }
+            } catch (Exception ignored) {}
+            return false;
+        }
+
+        @JavascriptInterface
+        public void openOverlaySettings() {
+            try {
+                Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Exception ignored) {}
+        }
+
+        /** Veb yaddaşının ehtiyat nüsxəsi (telefon yaddaşı). */
+        @JavascriptInterface
+        public void savePrefs(String json) {
+            try {
+                getSharedPreferences("jarvis_web", MODE_PRIVATE).edit().putString("state", json == null ? "" : json).apply();
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public String loadPrefs() {
+            try {
+                return getSharedPreferences("jarvis_web", MODE_PRIVATE).getString("state", "");
+            } catch (Exception e) {
+                return "";
+            }
+        }
+
+        @JavascriptInterface
+        public String permissionState() {
+            JSONObject o = new JSONObject();
+            try {
+                o.put("mic", checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED);
+                o.put("camera", checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED);
+                o.put("location", checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED);
+                if (Build.VERSION.SDK_INT >= 33) {
+                    o.put("notifications", checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED);
+                } else {
+                    o.put("notifications", true);
+                }
+                o.put("overlay", Settings.canDrawOverlays(MainActivity.this));
+            } catch (Exception ignored) {}
+            return o.toString();
         }
 
         @JavascriptInterface
@@ -970,7 +1041,12 @@ public class MainActivity extends Activity {
 
     private void handleIntent(Intent intent) {
         try {
-            if (intent == null || intent.getData() == null) return;
+            if (intent == null) return;
+            if (Intent.ACTION_ASSIST.equals(intent.getAction()) || intent.getBooleanExtra("wake", false)) {
+                pendingWake = true;
+                flushWake();
+            }
+            if (intent.getData() == null) return;
             Uri data = intent.getData();
             if ("azjarvis".equals(data.getScheme()) && "oauth".equals(data.getHost())) {
                 pendingDriveUrl = data.toString();
@@ -988,6 +1064,16 @@ public class MainActivity extends Activity {
                 web.evaluateJavascript(
                         "window.__jarvisNative && window.__jarvisNative.onDriveRedirect && window.__jarvisNative.onDriveRedirect("
                                 + JSONObject.quote(url) + ");", null);
+            } catch (Exception ignored) {}
+        });
+    }
+
+    private void flushWake() {
+        if (!pendingWake || web == null) return;
+        pendingWake = false;
+        web.post(() -> {
+            try {
+                web.evaluateJavascript("window.__jarvisWake && window.__jarvisWake();", null);
             } catch (Exception ignored) {}
         });
     }

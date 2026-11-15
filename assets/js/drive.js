@@ -30,6 +30,21 @@ async function sha256(text) {
   return crypto.subtle.digest('SHA-256', data);
 }
 
+async function driveError(res, prefix) {
+  let detail = '';
+  try {
+    const data = await res.json();
+    detail = data?.error?.message || '';
+  } catch { /* gövdə yoxdur */ }
+  if (res.status === 403 && /has not been used|disabled|accessNotConfigured/i.test(detail)) {
+    return 'Google Drive API açılmayıb. Google Cloud Console → APIs & Services → Library → "Google Drive API" → Enable. Sonra tətbiqdə yenidən bağlayın.';
+  }
+  if (res.status === 403 && /insufficient|scope/i.test(detail)) {
+    return 'Google icazəsi çatmır (scope). "Bağlantını kəs" → yenidən "Google Drive bağla" edin.';
+  }
+  return `${prefix} (${res.status})${detail ? ': ' + detail : ''}`;
+}
+
 function tokenError(data) {
   const code = String(data?.error || '');
   const desc = String(data?.error_description || code || 'Token alınmadı.');
@@ -268,7 +283,7 @@ export class DriveSync {
     const headers = await this.authHeaders();
     const q = encodeURIComponent(`name='${FILE_NAME}' and trashed=false`);
     const res = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime)&pageSize=1`, { headers });
-    if (!res.ok) throw new Error('Drive fayl siyahısı alınmadı (' + res.status + ').');
+    if (!res.ok) throw new Error(await driveError(res, 'Drive fayl siyahısı alınmadı'));
     const data = await res.json();
     const f = (data.files || [])[0];
     if (f) { this.fileId = f.id; return f.id; }

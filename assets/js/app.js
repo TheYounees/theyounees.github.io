@@ -4,9 +4,14 @@ import { store } from './store.js';
 import { ui, $ } from './ui.js';
 import { voice } from './voice.js';
 import { PROVIDERS, providerConfig } from './config.js';
-import { TOOL_DEFS, executeTool } from './tools.js';
+import { TOOL_DEFS, executeTool, getLastApp } from './tools.js';
+import { parseLocalCommand } from './commands.js';
 import { buildSystemPrompt, runTurn, fetchModels, pickModel } from './llm.js';
 import { drive } from './drive.js';
+
+function nativeBridge() {
+  try { return window.JarvisNative?.available?.() ? window.JarvisNative : null; } catch { return null; }
+}
 
 let busy = false;
 let pendingImage = null;
@@ -67,6 +72,14 @@ function init() {
   };
 
   voice.initVoices();
+  // Telefon yaddaşındaki ehtiyat nüsxə: ad və açar bir dəfə soruşulsun.
+  const nat = nativeBridge();
+  if (nat?.loadPrefs && !store.state.onboarded) {
+    try {
+      const raw = nat.loadPrefs();
+      if (raw) store.replaceState(JSON.parse(raw));
+    } catch { /* nüsxə yoxdur */ }
+  }
   drive.setClientId(store.state.settings.driveClientId || '');
   drive.setClientSecret(store.state.settings.driveClientSecret || '');
   ui.fillProfileFields(store.state.profile);
@@ -77,6 +90,7 @@ function init() {
 
   restoreTranscript();
   bindEvents();
+  refreshAssistantState();
   ui.setStatus(modeLabel());
 
   // Köhnə versiyadan qalmış provayder adı artıq mövcud deyilsə — Gemini.
@@ -97,8 +111,21 @@ function init() {
       ui.renderMemory(store.state);
       renderChats();
       if (drive.isConnected()) drive.scheduleSync(store.state);
+      const nb = nativeBridge();
+      if (nb?.savePrefs) {
+        try { nb.savePrefs(JSON.stringify(store.state)); } catch { /* yoxdur */ }
+      }
     }
   });
+
+  // Sistem asistanı / oyanma sözü tətbiqi açanda birbaşa dinləməyə başla.
+  window.__jarvisWake = () => {
+    try {
+      const mic = document.querySelector('#btn-mic');
+      if (mic && !busy) mic.click();
+      else if (!busy) ui.toast('Buyurun — mikrofonu basın.');
+    } catch { /* yoxdur */ }
+  };
 
   // Google Drive callback (OAuth redirect) yoxlanır.
   (async () => {
@@ -374,46 +401,42 @@ let pendingImageData = null;
 const NO_KEY_MESSAGE =
   'Beyin qoşulmayıb: Gemini API açarı yoxdur.\n\n☰ → Tənzimləmələr → "API açarı" sahəsinə açarı yaz → "Gətir" (açarı yoxlayır) → "Yadda saxla".\nAçarı burada pulsuz ala bilərsən: aistudio.google.com/apikey';
 
-/** Fənər, saat, tarix kimi əmrləri modelə göndərmədən dərhal icra edir. */
+/** Fənər, saat, tətbiq açma və naviqasiya kimi əmrləri modelə göndərmədən dərhal icra edir. */
 async function tryLocalCommand(text) {
-  const t = String(text).toLowerCase().replace(/[!?.…,]/g, ' ').replace(/\s+/g, ' ').trim();
-  const torchWord = /(f[əe]n[əe]r|fanar|iş[ıi]q)/.test(t);
+  const cmd = parseLocalCommand(text, { lastApp: getLastApp() });
+  if (!cmd) return null;
 
-  if (torchWord) {
-    const on = /(yan|yand[ıi]r|aç|ac\b)/.test(t);
-    const off = /(s[öo]nd[üu]r|ba[ğg]la|s[öo]n)/.test(t);
-    if (on || off) {
-      const action = on && !off ? 'torch_on' : 'torch_off';
-      const res = await executeTool('device_action', { action });
-      logTool('device_action', { action }, res);
-      if (res?.ok) return res.message || (action === 'torch_on' ? 'Fənər yandırıldı.' : 'Fənər söndürüldü.');
-      return res?.error || 'Fənəri idarə etmək alınmadı.';
-    }
+  if (cmd.type === 'repeat_missing') {
+    return 'Əvvəl hansı tətbiqi açdığımı xatırlamıram. Adını deyin — dərhal açım.';
   }
 
-  // "X aç" / "X-ə gir" — native mühitdə dərhal aç, modelə göndərmədən.
-  let native = null;
-  try {
-    if (window.JarvisNative?.available?.()) native = window.JarvisNative;
-  } catch { /* körpü yoxdur */ }
-
-  if (native && /(aç|ac|gir)(?![a-zəıöüşçğ])/.test(t)
-      && !/(plan|hesab|söhbət|mesaj|qeyd|yaddaş|axtar|sayt|link|bluetooth|wifi|wi-fi|internet|parlaqlıq|səs|zəng səsi|rejim)/.test(t)) {
-    const m = t.match(/^(.*?)\s*(?:aç|ac|gir)(?![a-zəıöüşçğ])/);
-    let name = (m?.[1] || '').trim();
-    name = name.replace(/-[a-zəıöüşçğ]+$/, '').trim();
-    name = name.replace(/(n[ıiuü]|[ıiuü])$/, '').trim();
-    if (name && name.length > 1) {
-      const res = await executeTool('device_action', { action: 'open_app', target: name });
-      logTool('device_action', { action: 'open_app', target: name }, res);
-      if (res?.ok) return res.message || `${name} açıldı.`;
-    }
+  if (cmd.type === 'torch_on' || cmd.type === 'torch_off') {
+    const res = await executeTool('device_action', { action: cmd.type });
+    logTool('device_action', { action: cmd.type }, res);
+    if (res?.ok) return res.message || (cmd.type === 'torch_on' ? 'Fənər yandırıldı.' : 'Fənər söndürüldü.');
+    return res?.error || 'Fənəri idarə etmək alınmadı.';
   }
 
-  if (/(saat ne[çc][əe]|ne[çc][əe] saat|saat ne[çc][əe]dir)/.test(t)) {
+  if (cmd.type === 'time') {
     const res = await executeTool('get_time', {});
     logTool('get_time', {}, res);
     if (res?.ok) return `İndi saat ${res.saat}, ${res.tarix}.`;
+    return null;
+  }
+
+  if (cmd.type === 'navigate') {
+    const args = { action: 'navigate', target: cmd.target, message: cmd.app || '' };
+    const res = await executeTool('device_action', args);
+    logTool('device_action', args, res);
+    if (res?.ok) return res.message || `${cmd.target} üçün yol göstərilir.`;
+    return res?.error || null;
+  }
+
+  if (cmd.type === 'open_app') {
+    const res = await executeTool('device_action', { action: 'open_app', target: cmd.target });
+    logTool('device_action', { action: 'open_app', target: cmd.target }, res);
+    if (res?.ok) return res.message || `${cmd.target} açıldı.`;
+    return res?.message || res?.error || null;
   }
 
   return null;
@@ -716,6 +739,24 @@ function autoGrow(el) {
   el.style.height = Math.min(el.scrollHeight, 132) + 'px';
 }
 
+function refreshAssistantState() {
+  const el = $('#assistant-status');
+  if (!el) return;
+  const nb = nativeBridge();
+  if (!nb?.permissionState) {
+    el.textContent = 'Asistan rejimi yalnız APK-da mövcuddur.';
+    return;
+  }
+  try {
+    const p = JSON.parse(nb.permissionState() || '{}');
+    const def = nb.isDefaultAssistant?.() ? 'bəli' : 'xeyr';
+    const mark = (v) => (v ? '✓' : '✗');
+    el.textContent = `Varsayılan asistan: ${def} · ${mark(p.mic)} mikrofon · ${mark(p.camera)} kamera · ${mark(p.location)} konum · ${mark(p.notifications)} bildiriş · ${mark(p.overlay)} üst qat`;
+  } catch {
+    el.textContent = 'Vəziyyət oxunmadı.';
+  }
+}
+
 function bindEvents() {
   const input = $('#input');
   input.addEventListener('input', () => autoGrow(input));
@@ -789,6 +830,25 @@ function bindEvents() {
     drive.disconnect();
     ui.toast('Google Drive bağlantısı kəsildi.');
     refreshDriveStatus();
+  });
+
+  $('#btn-perms')?.addEventListener('click', () => {
+    const nb = nativeBridge();
+    if (!nb?.requestPermissionsNow) { ui.toast('İcazələr yalnız APK-da idarə olunur.', 'err'); return; }
+    nb.requestPermissionsNow();
+    setTimeout(refreshAssistantState, 900);
+  });
+  $('#btn-assistant')?.addEventListener('click', () => {
+    const nb = nativeBridge();
+    if (!nb?.requestAssistantRole) { ui.toast('Asistan rejimi yalnız APK-da mövcuddur.', 'err'); return; }
+    nb.requestAssistantRole();
+    setTimeout(refreshAssistantState, 1200);
+  });
+  $('#btn-overlay')?.addEventListener('click', () => {
+    const nb = nativeBridge();
+    if (!nb?.openOverlaySettings) { ui.toast('Bu icazə yalnız APK-da lazımdır.', 'err'); return; }
+    nb.openOverlaySettings();
+    setTimeout(refreshAssistantState, 1200);
   });
   $('#st-provider').addEventListener('change', () => updateProviderHints('#st-provider', '#st-key', '#st-hint'));
 

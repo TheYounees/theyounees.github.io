@@ -3,6 +3,22 @@
 import { store } from './store.js';
 import { formatAzDate, formatAzTime } from './config.js';
 
+const LAST_APP_KEY = 'jarvis.lastApp';
+
+/** Son açılan tətbiq — "yenə aç" kimi əmrlər üçün. */
+export function getLastApp() {
+  try {
+    const raw = localStorage.getItem(LAST_APP_KEY);
+    return raw ? String(JSON.parse(raw).label || '') : '';
+  } catch { return ''; }
+}
+
+function rememberApp(label, query) {
+  try {
+    localStorage.setItem(LAST_APP_KEY, JSON.stringify({ label: String(label || query || ''), query: String(query || '') }));
+  } catch { /* yaddaş yoxdur */ }
+}
+
 /* ---------------- köməkçilər ---------------- */
 
 const WEATHER_CODES = {
@@ -518,13 +534,19 @@ async function deviceAction(args) {
         try {
           const raw = bridge.openAppSmart(target);
           const res = raw ? JSON.parse(raw) : {};
-          if (res.ok) return ok({ message: `${res.label || target} açıldı.` });
+          if (res.ok) {
+            rememberApp(res.label || target, target);
+            return ok({ message: `${res.label || target} açıldı.` });
+          }
           if (res.reason === 'empty') return fail('Hansı tətbiqi açım?');
         } catch { /* köhnə körpü — aşağıdakı üsula keç */ }
       }
       if (has('openApp')) {
         try {
-          if (bridge.openApp(target)) return ok({ message: `${target} açıldı.` });
+          if (bridge.openApp(target)) {
+            rememberApp(target, target);
+            return ok({ message: `${target} açıldı.` });
+          }
         } catch { /* brauzerə keç */ }
         // Native mühitdə tətbiq tapılmadı — Google axtarışı yox, Play Store.
         const query = playQuery(target);

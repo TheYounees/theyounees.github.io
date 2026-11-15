@@ -6,7 +6,15 @@ const MAX_TOOL_ROUNDS = 5;
 
 /* ---------------- sistem təlimatı ---------------- */
 
+function lastOpenedApp() {
+  try {
+    const raw = localStorage.getItem('jarvis.lastApp');
+    return raw ? String(JSON.parse(raw).label || '') : '';
+  } catch { return ''; }
+}
+
 export function buildSystemPrompt({ profile, facts, notes, settings, now = new Date() }) {
+  const lastApp = lastOpenedApp();
   const interests = (profile.interests || []).length
     ? profile.interests.join(', ')
     : 'hələ qeyd olunmayıb';
@@ -38,11 +46,14 @@ export function buildSystemPrompt({ profile, facts, notes, settings, now = new D
 5. Bilmirsənsə — "bilmirəm" de və nəyi yoxlaya biləcəyini təklif et. Uydurma.
 6. Cavabı səslə də oxunacaq kimi yaz: uzun URL-lər, artıq simvollar, emoji istifadə etmə.
 7. Sən həm də proqramçı, analitik, müəllim və planlaşdırıcısan. Kod yazanda işlək və səliqəli kod ver.
+8. İstifadəçi Azərbaycan hərflərini həmişə düzgün yazmaya bilər (ə yerinə e, ı yerinə i, ş yerinə s) və ya bir hərfi səhv yaza bilər. Mənasını kontekstdən anla, səhvi daxilində düzəlt, cavabı düzgün Azərbaycan hərfləri ilə yaz. Tətbiq adlarını olduğu kimi open_app alətinə ötür — uyğunlaşdırmanı cihaz özü edir.
+9. "Yenə aç", "təkrar aç", "onu aç" deyəndə son açılan tətbiqi open_app ilə aç.
 
 ## Yaddaş
 İstifadəçi haqqında bildiklərin:
 - Ad: ${profile.name || '(bilinmir — bir dəfə nəzakətlə soruşa bilərsən)'}
 - Şəhər: ${profile.city || '(bilinmir)'}
+- Son açılan tətbiq: ${lastApp || '(hələ yoxdur)'}
 - Maraqlar: ${interests}
 - Qeyd: ${profile.about || '(yoxdur)'}
 

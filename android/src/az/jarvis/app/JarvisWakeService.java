@@ -23,6 +23,7 @@ public class JarvisWakeService extends Service {
 
     private static final String TAG = "JarvisWake";
     private static final String CHANNEL_ID = "jarvis_wake";
+    private static final String FULL_CHANNEL_ID = "jarvis_wake_full";
     private static final int NOTIF_ID = 42;
     private static final String PREFS = "jarvis";
 
@@ -78,6 +79,10 @@ public class JarvisWakeService extends Service {
             ch.setDescription("Arxa planda 'Jarvis' oyanma sozunu dinlayir.");
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) nm.createNotificationChannel(ch);
+            NotificationChannel full = new NotificationChannel(FULL_CHANNEL_ID, "JARVIS oyanma (tam ekran)", NotificationManager.IMPORTANCE_HIGH);
+            full.setDescription("'Jarvis' deyildikdə tətbiqi ön plana çıxarır.");
+            full.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            if (nm != null) nm.createNotificationChannel(full);
         }
     }
 
@@ -168,7 +173,29 @@ public class JarvisWakeService extends Service {
         Intent launch = new Intent(this, MainActivity.class);
         launch.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         launch.putExtra("wake", true);
-        startActivity(launch);
+        try {
+            startActivity(launch);
+        } catch (Exception ignored) {}
+        // Arxa planda activity açılışı bloklanarsa tam ekran bildirişlə açırıq.
+        try {
+            Intent full = new Intent(this, MainActivity.class);
+            full.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            full.putExtra("wake", true);
+            PendingIntent pi = PendingIntent.getActivity(this, 1, full,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            Notification.Builder b = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    ? new Notification.Builder(this, FULL_CHANNEL_ID)
+                    : new Notification.Builder(this);
+            b.setContentTitle("JARVIS")
+             .setContentText("Buyurun — dinləyirəm.")
+             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+             .setPriority(Notification.PRIORITY_HIGH)
+             .setCategory(Notification.CATEGORY_CALL)
+             .setFullScreenIntent(pi, true)
+             .setAutoCancel(true);
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.notify(43, b.build());
+        } catch (Exception ignored) {}
         // keep service running for next wake
         scheduleRestart(1500);
     }
